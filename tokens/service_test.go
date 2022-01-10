@@ -50,7 +50,7 @@ func TestPayments(t *testing.T) {
 			{Amount: 10000, From: accs[0]},
 			{Amount: 10000, From: accs[1]},
 			{Amount: 10000, From: accs[2]},
-			{Amount: 1000, From: accs[3]},
+			{Amount: 1000, From: accs[2]},
 			{Amount: 2000, From: accs[1]},
 			{Amount: 3000, From: accs[0]},
 		}

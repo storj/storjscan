@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ErrService - tokens endpoint error class.
+// ErrEndpoint - tokens endpoint error class.
 var ErrEndpoint = errs.Class("tokens endpoint")
 
 // Endpoint for for querying ERC20 token information from ethereum chain.

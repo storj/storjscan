@@ -20,6 +20,7 @@ import (
 // Error is an error class for API http server error.
 var Error = errs.Class("multinode console server")
 
+// Config holds API endpoint configuration.
 type Config struct {
 	Address string
 }
@@ -49,7 +50,7 @@ func NewServer(log *zap.Logger, listener net.Listener) *Server {
 	}
 }
 
-// NewApi creates new API route and register endpoint methods.
+// NewAPI creates new API route and register endpoint methods.
 func (server *Server) NewAPI(path string, register func(*mux.Router)) {
 	apiRouter := server.router.GetRoute("api").Subrouter()
 	router := apiRouter.PathPrefix(path).Subrouter()

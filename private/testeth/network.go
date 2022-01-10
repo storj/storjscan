@@ -5,6 +5,7 @@ package testeth
 
 import (
 	"context"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
@@ -149,7 +150,7 @@ func (network *Network) WaitForTx(ctx context.Context, hash common.Hash) (*types
 		}
 		return rcpt, errs.New("transaction failed")
 	}
-	if err != ethereum.NotFound {
+	if !errors.Is(err, ethereum.NotFound) {
 		return rcpt, err
 	}
 
@@ -167,7 +168,7 @@ func (network *Network) WaitForTx(ctx context.Context, hash common.Hash) (*types
 			}
 			return rcpt, errs.New("transaction failed")
 		}
-		if err != ethereum.NotFound {
+		if !errors.Is(err, ethereum.NotFound) {
 			return rcpt, err
 		}
 	}

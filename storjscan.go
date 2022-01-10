@@ -19,6 +19,7 @@ import (
 
 var mon = monkit.Package()
 
+// Config wraps storjscan configuration.
 type Config struct {
 	Debug  debug.Config
 	Tokens tokens.Config

@@ -17,6 +17,7 @@ import (
 // ErrService - tokens service error class.
 var ErrService = errs.Class("tokens service")
 
+// Config holds tokens service configuration.
 type Config struct {
 	Endpoint     string
 	TokenAddress string

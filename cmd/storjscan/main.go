@@ -14,6 +14,18 @@ import (
 )
 
 func main() {
+	var config storjscan.Config
+
+	config.API.Address = "127.0.0.1:14002"
+	config.Tokens.Endpoint = "http://127.0.0.1:7545"
+	config.Tokens.TokenAddress = "0x65B38B8fc2a8d8fc2798a002DfD8e257aB6b0382"
+
+	if err := run(context.Background(), config); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(ctx context.Context, config storjscan.Config) error {
 	logger := zap.NewExample()
 	defer func() {
 		if err := logger.Sync(); err != nil {
@@ -21,21 +33,12 @@ func main() {
 		}
 	}()
 
-	var config storjscan.Config
-
-	config.API.Address = "127.0.0.1:14002"
-	config.Tokens.Endpoint = "http://127.0.0.1:7545"
-	config.Tokens.TokenAddress = "0x65B38B8fc2a8d8fc2798a002DfD8e257aB6b0382"
-
 	app, err := storjscan.NewApp(logger.Named("storjscan"), config)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	runErr := app.Run(context.Background())
+	runErr := app.Run(ctx)
 	closeErr := app.Close()
-
-	if err = errs.Combine(runErr, closeErr); err != nil {
-		log.Fatal(err)
-	}
+	return errs.Combine(runErr, closeErr)
 }
