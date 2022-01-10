@@ -56,10 +56,12 @@ func TestEndpoint(t *testing.T) {
 		url := fmt.Sprintf(
 			"http://%s/api/v0/example/payments/%s",
 			lis.Addr().String(), accounts[1].Address.String())
-
-		resp, err := http.Get(url)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
-		defer ctx.Check(resp.Body.Close)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer ctx.Check(func() error { return resp.Body.Close() })
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var payments []tokens.Payment
