@@ -69,8 +69,6 @@ pipeline {
                         sh 'staticcheck ./...'
                         sh 'golangci-lint --config /go/ci/.golangci.yml -j=2 run'
                         sh 'check-mod-tidy -mod .build/go.mod.orig'
-
-                        sh './scripts/check-package-lock.sh'
                      }
                 }
                 stage('Tests') {
