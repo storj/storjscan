@@ -18,7 +18,7 @@ import (
 )
 
 // Error is an error class for API http server error.
-var Error = errs.Class("multinode console server")
+var Error = errs.Class("api server")
 
 // Config holds API endpoint configuration.
 type Config struct {
