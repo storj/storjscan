@@ -5,12 +5,15 @@ package tokens
 
 import (
 	"context"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/tokens/erc20"
 )
 
@@ -19,8 +22,8 @@ var ErrService = errs.Class("tokens service")
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoint     string
-	TokenAddress string
+	Endpoint string
+	Contract string
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -29,20 +32,22 @@ type Config struct {
 type Service struct {
 	log      *zap.Logger
 	endpoint string
-	token    Address
+	token    blockchain.Address
+	headers  *blockchain.HeadersCache
 }
 
 // NewService creates new token service instance.
-func NewService(log *zap.Logger, endpoint string, token Address) *Service {
+func NewService(log *zap.Logger, endpoint string, token blockchain.Address, headers *blockchain.HeadersCache) *Service {
 	return &Service{
 		log:      log,
 		endpoint: endpoint,
 		token:    token,
+		headers:  headers,
 	}
 }
 
 // Payments retrieves all ERC20 token payments for ethereum address.
-func (service *Service) Payments(ctx context.Context, address Address) (_ []Payment, err error) {
+func (service *Service) Payments(ctx context.Context, address blockchain.Address) (_ []Payment, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
@@ -61,7 +66,7 @@ func (service *Service) Payments(ctx context.Context, address Address) (_ []Paym
 		End:     nil,
 		Context: ctx,
 	}
-	iter, err := token.FilterTransfer(opts, nil, []Address{address})
+	iter, err := token.FilterTransfer(opts, nil, []common.Address{address})
 	if err != nil {
 		return nil, ErrService.Wrap(err)
 	}
@@ -69,12 +74,34 @@ func (service *Service) Payments(ctx context.Context, address Address) (_ []Paym
 
 	var payments []Payment
 	for iter.Next() {
+		cached, ok, err := service.headers.Get(ctx, iter.Event.Raw.BlockHash)
+		if err != nil {
+			return payments, err
+		}
+
+		var timestamp time.Time
+		if !ok {
+			service.log.Info("Block header missing from cache",
+				zap.Int64("Number", int64(iter.Event.Raw.BlockNumber)),
+				zap.String("Hash", iter.Event.Raw.BlockHash.String()))
+
+			header, err := client.HeaderByHash(ctx, iter.Event.Raw.BlockHash)
+			if err != nil {
+				return payments, err
+			}
+
+			timestamp = time.Unix(int64(header.Time), 0)
+		} else {
+			timestamp = cached.Timestamp
+		}
+
 		payments = append(payments, Payment{
 			From:        iter.Event.From,
 			TokenValue:  iter.Event.Value,
 			Transaction: iter.Event.Raw.TxHash,
+			Timestamp:   timestamp,
 		})
 	}
 
-	return payments, nil
+	return payments, iter.Error()
 }

@@ -14,6 +14,7 @@ import (
 	"storj.io/private/dbutil/pgutil"
 	"storj.io/private/migrate"
 	"storj.io/private/tagsql"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/storjscandb/dbx"
 )
 
@@ -80,6 +81,11 @@ func (db *DB) MigrateToLatest(ctx context.Context) error {
 		return migrate.Create(ctx, "database", db.DB)
 	}
 	return migration.Run(ctx, db.log)
+}
+
+// Headers creates new headersDB with current DB connection.
+func (db *DB) Headers() blockchain.HeadersDB {
+	return &headersDB{db: db.DB}
 }
 
 // PostgresMigration returns steps needed for migrating postgres database.
