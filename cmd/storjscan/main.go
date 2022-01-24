@@ -7,20 +7,29 @@ import (
 	"context"
 	"log"
 
+	"github.com/spf13/pflag"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
+	"storj.io/private/cfgstruct"
 	"storj.io/storjscan"
+	"storj.io/storjscan/storjscandb"
 )
 
+// Flags contains storjscan app configuration.
+var Flags struct {
+	Database string
+	storjscan.Config
+}
+
+func init() {
+	cfgstruct.Bind(pflag.CommandLine, &Flags)
+}
+
 func main() {
-	var config storjscan.Config
+	pflag.Parse()
 
-	config.API.Address = "127.0.0.1:14002"
-	config.Tokens.Endpoint = "http://127.0.0.1:7545"
-	config.Tokens.TokenAddress = "0x65B38B8fc2a8d8fc2798a002DfD8e257aB6b0382"
-
-	if err := run(context.Background(), config); err != nil {
+	if err := run(context.Background(), Flags.Config); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -33,7 +42,12 @@ func run(ctx context.Context, config storjscan.Config) error {
 		}
 	}()
 
-	app, err := storjscan.NewApp(logger.Named("storjscan"), config)
+	db, err := storjscandb.Open(ctx, logger.Named("storjscandb"), Flags.Database)
+	if err != nil {
+		return err
+	}
+
+	app, err := storjscan.NewApp(logger.Named("storjscan"), config, db)
 	if err != nil {
 		return err
 	}
