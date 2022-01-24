@@ -5,6 +5,7 @@ package testeth
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 
@@ -14,8 +15,8 @@ import (
 // Run creates Ethereum test network with deployed test token and executes test function.
 func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *Network)) {
 	t.Run("Ethereum", func(t *testing.T) {
-		t.Parallel()
-		ctx := testcontext.New(t)
+		//t.Parallel()
+		ctx := testcontext.NewWithTimeout(t, 10*time.Minute)
 		defer ctx.Cleanup()
 
 		network, err := NewNetwork()
