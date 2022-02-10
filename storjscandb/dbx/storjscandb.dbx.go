@@ -323,6 +323,11 @@ func (obj *pgxDB) Schema() string {
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( hash )
 );
+CREATE TABLE token_prices (
+	interval_start timestamp with time zone NOT NULL,
+	price double precision NOT NULL,
+	PRIMARY KEY ( interval_start )
+);
 CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;`
 }
 
@@ -474,6 +479,55 @@ func (f BlockHeader_CreatedAt_Field) value() interface{} {
 }
 
 func (BlockHeader_CreatedAt_Field) _Column() string { return "created_at" }
+
+type TokenPrice struct {
+	IntervalStart time.Time
+	Price         float64
+}
+
+func (TokenPrice) _Table() string { return "token_prices" }
+
+type TokenPrice_Update_Fields struct {
+	Price TokenPrice_Price_Field
+}
+
+type TokenPrice_IntervalStart_Field struct {
+	_set   bool
+	_null  bool
+	_value time.Time
+}
+
+func TokenPrice_IntervalStart(v time.Time) TokenPrice_IntervalStart_Field {
+	return TokenPrice_IntervalStart_Field{_set: true, _value: v}
+}
+
+func (f TokenPrice_IntervalStart_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TokenPrice_IntervalStart_Field) _Column() string { return "interval_start" }
+
+type TokenPrice_Price_Field struct {
+	_set   bool
+	_null  bool
+	_value float64
+}
+
+func TokenPrice_Price(v float64) TokenPrice_Price_Field {
+	return TokenPrice_Price_Field{_set: true, _value: v}
+}
+
+func (f TokenPrice_Price_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TokenPrice_Price_Field) _Column() string { return "price" }
 
 func toUTC(t time.Time) time.Time {
 	return t.UTC()
@@ -926,6 +980,31 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 
 }
 
+func (obj *pgxImpl) Create_TokenPrice(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field,
+	token_price_price TokenPrice_Price_Field) (
+	token_price *TokenPrice, err error) {
+	defer mon.Task()(&ctx)(&err)
+	__interval_start_val := token_price_interval_start.value()
+	__price_val := token_price_price.value()
+
+	var __embed_stmt = __sqlbundle_Literal("INSERT INTO token_prices ( interval_start, price ) VALUES ( ?, ? ) RETURNING token_prices.interval_start, token_prices.price")
+
+	var __values []interface{}
+	__values = append(__values, __interval_start_val, __price_val)
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	token_price = &TokenPrice{}
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&token_price.IntervalStart, &token_price.Price)
+	if err != nil {
+		return nil, obj.makeErr(err)
+	}
+	return token_price, nil
+
+}
+
 func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	rows []*BlockHeader, err error) {
 	defer mon.Task()(&ctx)(&err)
@@ -1096,6 +1175,116 @@ func (obj *pgxImpl) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
 
 }
 
+func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field) (
+	token_price *TokenPrice, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start = ?")
+
+	var __values []interface{}
+	__values = append(__values, token_price_interval_start.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	token_price = &TokenPrice{}
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&token_price.IntervalStart, &token_price.Price)
+	if err != nil {
+		return (*TokenPrice)(nil), obj.makeErr(err)
+	}
+	return token_price, nil
+
+}
+
+func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
+	token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+	token_price *TokenPrice, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start > ? ORDER BY token_prices.interval_start LIMIT 1 OFFSET 0")
+
+	var __values []interface{}
+	__values = append(__values, token_price_interval_start_greater.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		token_price, err = func() (token_price *TokenPrice, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
+
+			token_price = &TokenPrice{}
+			err = __rows.Scan(&token_price.IntervalStart, &token_price.Price)
+			if err != nil {
+				return nil, err
+			}
+
+			return token_price, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return token_price, nil
+	}
+
+}
+
+func (obj *pgxImpl) Update_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field,
+	update TokenPrice_Update_Fields) (
+	token_price *TokenPrice, err error) {
+	defer mon.Task()(&ctx)(&err)
+	var __sets = &__sqlbundle_Hole{}
+
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE token_prices SET "), __sets, __sqlbundle_Literal(" WHERE token_prices.interval_start = ? RETURNING token_prices.interval_start, token_prices.price")}}
+
+	__sets_sql := __sqlbundle_Literals{Join: ", "}
+	var __values []interface{}
+	var __args []interface{}
+
+	if update.Price._set {
+		__values = append(__values, update.Price.value())
+		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("price = ?"))
+	}
+
+	if len(__sets_sql.SQLs) == 0 {
+		return nil, emptyUpdate()
+	}
+
+	__args = append(__args, token_price_interval_start.value())
+
+	__values = append(__values, __args...)
+	__sets.SQL = __sets_sql
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	token_price = &TokenPrice{}
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&token_price.IntervalStart, &token_price.Price)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, obj.makeErr(err)
+	}
+	return token_price, nil
+}
+
 func (obj *pgxImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
@@ -1105,6 +1294,33 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 
 	var __values []interface{}
 	__values = append(__values, block_header_hash.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return false, obj.makeErr(err)
+	}
+
+	__count, err := __res.RowsAffected()
+	if err != nil {
+		return false, obj.makeErr(err)
+	}
+
+	return __count > 0, nil
+
+}
+
+func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field) (
+	deleted bool, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start = ?")
+
+	var __values []interface{}
+	__values = append(__values, token_price_interval_start.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1137,6 +1353,16 @@ func (obj *pgxImpl) deleteAll(ctx context.Context) (count int64, err error) {
 	defer mon.Task()(&ctx)(&err)
 	var __res sql.Result
 	var __count int64
+	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM token_prices;")
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	__count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+	count += __count
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM block_headers;")
 	if err != nil {
 		return 0, obj.makeErr(err)
@@ -1216,6 +1442,18 @@ func (rx *Rx) Create_BlockHeader(ctx context.Context,
 
 }
 
+func (rx *Rx) Create_TokenPrice(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field,
+	token_price_price TokenPrice_Price_Field) (
+	token_price *TokenPrice, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Create_TokenPrice(ctx, token_price_interval_start, token_price_price)
+
+}
+
 func (rx *Rx) Delete_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
@@ -1226,6 +1464,16 @@ func (rx *Rx) Delete_BlockHeader_By_Hash(ctx context.Context,
 	return tx.Delete_BlockHeader_By_Hash(ctx, block_header_hash)
 }
 
+func (rx *Rx) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field) (
+	deleted bool, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Delete_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
+}
+
 func (rx *Rx) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
 	block_header_timestamp_greater BlockHeader_Timestamp_Field) (
 	block_header *BlockHeader, err error) {
@@ -1234,6 +1482,16 @@ func (rx *Rx) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
 		return
 	}
 	return tx.First_BlockHeader_By_Timestamp_Greater(ctx, block_header_timestamp_greater)
+}
+
+func (rx *Rx) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
+	token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+	token_price *TokenPrice, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx, token_price_interval_start_greater)
 }
 
 func (rx *Rx) Get_BlockHeader_By_Hash(ctx context.Context,
@@ -1256,6 +1514,27 @@ func (rx *Rx) Get_BlockHeader_By_Number(ctx context.Context,
 	return tx.Get_BlockHeader_By_Number(ctx, block_header_number)
 }
 
+func (rx *Rx) Get_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field) (
+	token_price *TokenPrice, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Get_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
+}
+
+func (rx *Rx) Update_TokenPrice_By_IntervalStart(ctx context.Context,
+	token_price_interval_start TokenPrice_IntervalStart_Field,
+	update TokenPrice_Update_Fields) (
+	token_price *TokenPrice, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Update_TokenPrice_By_IntervalStart(ctx, token_price_interval_start, update)
+}
+
 type Methods interface {
 	All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 		rows []*BlockHeader, err error)
@@ -1266,13 +1545,26 @@ type Methods interface {
 		block_header_timestamp BlockHeader_Timestamp_Field) (
 		block_header *BlockHeader, err error)
 
+	Create_TokenPrice(ctx context.Context,
+		token_price_interval_start TokenPrice_IntervalStart_Field,
+		token_price_price TokenPrice_Price_Field) (
+		token_price *TokenPrice, err error)
+
 	Delete_BlockHeader_By_Hash(ctx context.Context,
 		block_header_hash BlockHeader_Hash_Field) (
+		deleted bool, err error)
+
+	Delete_TokenPrice_By_IntervalStart(ctx context.Context,
+		token_price_interval_start TokenPrice_IntervalStart_Field) (
 		deleted bool, err error)
 
 	First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
 		block_header_timestamp_greater BlockHeader_Timestamp_Field) (
 		block_header *BlockHeader, err error)
+
+	First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
+		token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+		token_price *TokenPrice, err error)
 
 	Get_BlockHeader_By_Hash(ctx context.Context,
 		block_header_hash BlockHeader_Hash_Field) (
@@ -1281,6 +1573,15 @@ type Methods interface {
 	Get_BlockHeader_By_Number(ctx context.Context,
 		block_header_number BlockHeader_Number_Field) (
 		block_header *BlockHeader, err error)
+
+	Get_TokenPrice_By_IntervalStart(ctx context.Context,
+		token_price_interval_start TokenPrice_IntervalStart_Field) (
+		token_price *TokenPrice, err error)
+
+	Update_TokenPrice_By_IntervalStart(ctx context.Context,
+		token_price_interval_start TokenPrice_IntervalStart_Field,
+		update TokenPrice_Update_Fields) (
+		token_price *TokenPrice, err error)
 }
 
 type TxMethods interface {

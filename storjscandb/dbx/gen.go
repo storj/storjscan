@@ -21,7 +21,7 @@ var mon = monkit.Package()
 
 func init() {
 	// catch dbx errors
-	class := errs.Class("satellitedb")
+	class := errs.Class("storjscandb")
 	WrapErr = func(e *Error) error {
 		switch e.Code {
 		case ErrorCode_NoRows:

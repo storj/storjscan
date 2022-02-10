@@ -24,6 +24,13 @@ const (
 	usdSymbol = "USD"
 )
 
+// Config holds coinmarketcap configuration.
+type Config struct {
+	BaseURL string        `help:"base URL for ticker price API" default:"https://pro-api.coinmarketcap.com" testDefault:"$TESTBASEURL"`
+	APIKey  string        `help:"API Key used to access coinmarketcap" default:"" testDefault:"$TESTAPIKEY"`
+	Timeout time.Duration `help:"coinmarketcap API response timeout" default:"10s" testDefault:"$TESTTIMEOUT"`
+}
+
 // Client is used to query the coinmarketcap API for the STORJ token price.
 type Client struct {
 	httpClient *http.Client
@@ -32,11 +39,13 @@ type Client struct {
 }
 
 // NewClient returns a new token price client.
-func NewClient(baseURL, apiKey string, httpClient *http.Client) *Client {
+func NewClient(config Config) *Client {
 	return &Client{
-		httpClient: httpClient,
-		baseURL:    baseURL,
-		apiKey:     apiKey,
+		httpClient: &http.Client{
+			Timeout: config.Timeout,
+		},
+		baseURL: config.BaseURL,
+		apiKey:  config.APIKey,
 	}
 }
 

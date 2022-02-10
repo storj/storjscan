@@ -34,3 +34,26 @@ read first (
 	select block_header
 	where block_header.timestamp > ?
 )
+
+//--- token price ---//
+model token_price (
+    key interval_start
+
+    field interval_start timestamp
+    field price          float64   ( updatable )
+)
+
+create token_price ( )
+update token_price ( where token_price.interval_start = ? )
+delete token_price ( where token_price.interval_start = ? )
+
+read one (
+	select token_price
+	where token_price.interval_start = ?
+)
+
+read first (
+	select token_price
+	where token_price.interval_start > ?
+	orderby asc token_price.interval_start
+)

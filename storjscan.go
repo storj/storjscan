@@ -15,6 +15,8 @@ import (
 	"storj.io/private/debug"
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
+	"storj.io/storjscan/tokenprice"
+	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokens"
 )
 
@@ -22,22 +24,26 @@ var mon = monkit.Package()
 
 // Config wraps storjscan configuration.
 type Config struct {
-	Debug  debug.Config
-	Tokens tokens.Config
-	API    api.Config
+	Debug      debug.Config
+	Tokens     tokens.Config
+	TokenPrice tokenprice.Config
+	API        api.Config
 }
 
 // DB is a collection of storjscan databases.
 type DB interface {
+	// TokenPrice returns database for STORJ token price information
+	TokenPrice() tokenprice.PriceQuoteDB
 }
 
 // App is the storjscan process that runs API endpoint.
 //
 // architecture: Peer
 type App struct {
-	Log     *zap.Logger
-	DB      DB
-	Servers *lifecycle.Group
+	Log      *zap.Logger
+	DB       DB
+	Servers  *lifecycle.Group
+	Services *lifecycle.Group
 
 	Debug struct {
 		Listener net.Listener
@@ -47,6 +53,10 @@ type App struct {
 	Tokens struct {
 		Service  *tokens.Service
 		Endpoint *tokens.Endpoint
+	}
+
+	TokenPrice struct {
+		Chore *tokenprice.Chore
 	}
 
 	API struct {
@@ -61,7 +71,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		Log: log,
 		DB:  db,
 
-		Servers: lifecycle.NewGroup(log.Named("servers")),
+		Servers:  lifecycle.NewGroup(log.Named("servers")),
+		Services: lifecycle.NewGroup(log.Named("services")),
 	}
 
 	{ // tokens
@@ -75,6 +86,17 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			token)
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
+	}
+
+	{ // token price
+		client := coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
+		app.TokenPrice.Chore = tokenprice.NewChore(log.Named("tokenprice:chore"), db.TokenPrice(), client, config.TokenPrice.Interval)
+
+		app.Services.Add(lifecycle.Item{
+			Name:  "tokenprice:chore",
+			Run:   app.TokenPrice.Chore.Run,
+			Close: app.TokenPrice.Chore.Close,
+		})
 	}
 
 	{ // API

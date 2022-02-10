@@ -15,6 +15,7 @@ import (
 	"storj.io/private/migrate"
 	"storj.io/private/tagsql"
 	"storj.io/storjscan/storjscandb/dbx"
+	"storj.io/storjscan/tokenprice"
 )
 
 var (
@@ -82,6 +83,11 @@ func (db *DB) MigrateToLatest(ctx context.Context) error {
 	return migration.Run(ctx, db.log)
 }
 
+// TokenPrice creates new PriceQuoteDB with current DB connection.
+func (db *DB) TokenPrice() tokenprice.PriceQuoteDB {
+	return &priceQuoteDB{db: db.DB}
+}
+
 // PostgresMigration returns steps needed for migrating postgres database.
 func (db *DB) PostgresMigration() *migrate.Migration {
 	return &migrate.Migration{
@@ -100,6 +106,18 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 						PRIMARY KEY ( hash )
 					);
 					CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Create token price table",
+				Version:     1,
+				Action: migrate.SQL{
+					`CREATE TABLE token_prices (
+						interval_start timestamp with time zone NOT NULL,
+						price double precision NOT NULL,
+						PRIMARY KEY ( interval_start )
+					);`,
 				},
 			},
 		},

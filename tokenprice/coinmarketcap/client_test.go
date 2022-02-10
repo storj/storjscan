@@ -1,47 +1,33 @@
 // Copyright (C) 2022 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package coinmarketcap
+package coinmarketcap_test
 
 import (
 	"encoding/json"
-	"flag"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"storj.io/common/testcontext"
+	"storj.io/storjscan/tokenprice/coinmarketcap"
+	"storj.io/storjscan/tokenprice/coinmarketcaptest"
 )
 
-const (
-	testURLEndpoint = "https://sandbox-api.coinmarketcap.com"
-)
-
-func getenv(priority ...string) string {
-	for _, p := range priority {
-		v := os.Getenv(p)
-		if v != "" {
-			return v
-		}
+type errorResponse struct {
+	Status struct {
+		ErrorCode    int
+		ErrorMessage string
 	}
-	return ""
-}
-
-// apiKey is the api key for requesting data from the coinmarketcap API.
-var apiKey = flag.String("coinmarketcap-api-key", getenv("COINMARKETCAP_API_KEY"), "coinmarketcap api key, \"omit\" is used to omit the tests from output")
-
-type TB interface {
-	Skip(...interface{})
+	Data []interface{}
 }
 
 func TestClientGetLatestPrice(t *testing.T) {
 	ctx := testcontext.New(t)
-	client := NewClient(testURLEndpoint, pickAPIKey(t), &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t))
 	time, price, err := client.GetLatestPrice(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, time)
@@ -50,7 +36,7 @@ func TestClientGetLatestPrice(t *testing.T) {
 
 func TestClientGetLatestPriceBadUrl(t *testing.T) {
 	ctx := testcontext.New(t)
-	client := NewClient("http://this.wont.work:1234", "123abc", &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(getConfigBadURL(t))
 	_, _, err := client.GetLatestPrice(ctx)
 	require.Error(t, err)
 }
@@ -64,14 +50,14 @@ func TestClientGetLatestPriceBadKey(t *testing.T) {
 	defer ts.Close()
 
 	ctx := testcontext.New(t)
-	client := NewClient(ts.URL, pickAPIKey(t), &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(getConfigBadKey(ts.URL))
 	_, _, err := client.GetLatestPrice(ctx)
 	require.Error(t, err)
 }
 
 func TestClientGetPriceAt(t *testing.T) {
 	ctx := testcontext.New(t)
-	client := NewClient(testURLEndpoint, pickAPIKey(t), &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t))
 	time, price, err := client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, time)
@@ -80,7 +66,7 @@ func TestClientGetPriceAt(t *testing.T) {
 
 func TestClientGetPriceAtBadUrl(t *testing.T) {
 	ctx := testcontext.New(t)
-	client := NewClient("http://this.wont.work:1234", "123abc", &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(getConfigBadURL(t))
 	_, _, err := client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
 	require.Error(t, err)
 }
@@ -94,26 +80,33 @@ func TestClientGetPriceAtBadKey(t *testing.T) {
 	defer ts.Close()
 
 	ctx := testcontext.New(t)
-	client := NewClient(ts.URL, pickAPIKey(t), &http.Client{Timeout: time.Second * 5})
+	client := coinmarketcap.NewClient(getConfigBadKey(ts.URL))
 	_, _, err := client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
 	require.Error(t, err)
 }
 
-// pickAPIKey picks one coinmarketcap api key from flag.
-func pickAPIKey(t TB) string {
-	if *apiKey == "" || strings.EqualFold(*apiKey, "omit") {
-		t.Skip("coinmarketcap api key flag missing, example: -COINMARKETCAP_API_KEY=<coinmarketcap api key>")
-	}
-	return *apiKey
+func getErrorResponseBadKey() errorResponse {
+	var response errorResponse
+	response.Status.ErrorCode = 1001
+	response.Status.ErrorMessage = "This API Key is invalid."
+	response.Data = []interface{}{}
+	return response
 }
 
-func getErrorResponseBadKey() *quoteLatestResponse {
-	errMessage := "This API Key is invalid."
-	return &quoteLatestResponse{
-		Status: status{
-			ErrorCode:    1001,
-			ErrorMessage: errMessage,
-		},
-		Data: map[string]quoteLatestData{},
+// getConfigBadURL get a coinmarketcap configuration with a bad URL.
+func getConfigBadURL(t *testing.T) coinmarketcap.Config {
+	return coinmarketcap.Config{
+		Timeout: time.Second * 5,
+		BaseURL: "http://this.wont.work:1234",
+		APIKey:  coinmarketcaptest.PickAPIKey(t),
+	}
+}
+
+// getConfigBadKey get a coinmarketcap configuration with a bad API key.
+func getConfigBadKey(url string) coinmarketcap.Config {
+	return coinmarketcap.Config{
+		Timeout: time.Second * 5,
+		BaseURL: url,
+		APIKey:  "123abc",
 	}
 }
