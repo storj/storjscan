@@ -4,6 +4,7 @@
 package tokens_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -16,23 +17,29 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
+	"storj.io/common/uuid"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
 	"storj.io/storjscan/tokens"
 )
 
-func TestEndpoint(t *testing.T) {
+func TestEndpointWithAuth(t *testing.T) {
 	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
 
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 
+		// create a UUID api key
+		apiKey, err := uuid.New()
+		require.NoError(t, err)
 		service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress)
 		endpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
 
-		apiServer := api.NewServer(logger, lis)
+		require.NoError(t, err)
+		// store the uuid key bytes on the server
+		apiServer := api.NewServer(logger, lis, [][]byte{apiKey.Bytes()})
 		apiServer.NewAPI("/example", endpoint.Register)
 		ctx.Go(func() error {
 			return apiServer.Run(ctx)
@@ -58,6 +65,9 @@ func TestEndpoint(t *testing.T) {
 			lis.Addr().String(), accounts[1].Address.String())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
+
+		// send the API key as an encoded string of the UUID bytes. server will decode and compare to UUID bytes
+		req.Header.Set("STORJSCAN_API_KEY", base64.URLEncoding.EncodeToString(apiKey.Bytes()))
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

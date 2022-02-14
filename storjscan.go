@@ -5,6 +5,7 @@ package storjscan
 
 import (
 	"context"
+	"encoding/base64"
 	"net"
 
 	"github.com/spacemonkeygo/monkit/v3"
@@ -84,7 +85,11 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			return nil, err
 		}
 
-		app.API.Server = api.NewServer(log.Named("api:server"), app.API.Listener)
+		apiKeys, err := getKeyBytes(config.API.Keys)
+		if err != nil {
+			return nil, err
+		}
+		app.API.Server = api.NewServer(log.Named("api:server"), app.API.Listener, apiKeys)
 		app.API.Server.NewAPI("/tokens", app.Tokens.Endpoint.Register)
 
 		app.Servers.Add(lifecycle.Item{
@@ -111,4 +116,16 @@ func (app *App) Run(ctx context.Context) (err error) {
 // Close closes all the resources.
 func (app *App) Close() error {
 	return app.Servers.Close()
+}
+
+func getKeyBytes(keys []string) ([][]byte, error) {
+	apiKeys := make([][]byte, 0, len(keys))
+	for _, key := range keys {
+		apiKey, err := base64.URLEncoding.DecodeString(key)
+		if err != nil {
+			return nil, err
+		}
+		apiKeys = append(apiKeys, apiKey)
+	}
+	return apiKeys, nil
 }
