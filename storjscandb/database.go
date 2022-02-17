@@ -40,7 +40,7 @@ func Open(ctx context.Context, log *zap.Logger, databaseURL string) (*DB, error)
 	if err != nil {
 		return nil, err
 	}
-	if impl != dbutil.Postgres && impl != dbutil.Cockroach {
+	if impl != dbutil.Postgres {
 		return nil, Error.New("unsupported driver %q", driver)
 	}
 
