@@ -26,11 +26,16 @@ type Config struct {
 	API    api.Config
 }
 
+// DB is a collection of storjscan databases.
+type DB interface {
+}
+
 // App is the storjscan process that runs API endpoint.
 //
 // architecture: Peer
 type App struct {
 	Log     *zap.Logger
+	DB      DB
 	Servers *lifecycle.Group
 
 	Debug struct {
@@ -50,9 +55,10 @@ type App struct {
 }
 
 // NewApp creates new storjscan application instance.
-func NewApp(log *zap.Logger, config Config) (*App, error) {
+func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	app := &App{
 		Log: log,
+		DB:  db,
 
 		Servers: lifecycle.NewGroup(log.Named("servers")),
 	}
@@ -63,7 +69,10 @@ func NewApp(log *zap.Logger, config Config) (*App, error) {
 			return nil, err
 		}
 
-		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"), config.Tokens.Endpoint, token)
+		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
+			config.Tokens.Endpoint,
+			token)
+
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}
 
