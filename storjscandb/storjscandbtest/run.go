@@ -21,8 +21,11 @@ import (
 	"storj.io/storjscan/storjscandb"
 )
 
+// Checks that test db implements storjscan.DB.
+var _ storjscan.DB = (*DB)(nil)
+
 // Run creates new storjscan test database, create tables and execute test function against that db.
-func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, db storjscan.DB)) {
+func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, db *DB)) {
 	t.Run("Postgres", func(t *testing.T) {
 		ctx := testcontext.New(t)
 		defer ctx.Cleanup()
