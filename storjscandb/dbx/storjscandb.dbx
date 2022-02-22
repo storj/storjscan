@@ -1,3 +1,4 @@
+//--- block_header --- //
 model block_header (
 	key hash
 
@@ -34,3 +35,26 @@ read first (
 	select block_header
 	where block_header.timestamp > ?
 )
+
+//--- wallet ---//
+model wallet (
+    key address
+
+    field address blob
+    field claimed timestamp (updatable, nullable)
+    field created_at timestamp ( autoinsert, default current_timestamp )
+)
+
+create wallet ( )
+update wallet ( where wallet.address = ?)
+
+read one (
+    select wallet
+    where wallet.address = ?
+)
+
+read first (
+    select wallet
+    where wallet.claimed = null
+)
+
