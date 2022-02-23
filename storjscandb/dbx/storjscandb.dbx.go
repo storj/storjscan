@@ -1239,11 +1239,11 @@ func (obj *pgxImpl) Get_Wallet_By_Address(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) First_Wallet_By_Claimed_Equal_False(ctx context.Context) (
+func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.created_at FROM wallets WHERE wallets.claimed = false LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.created_at FROM wallets WHERE wallets.claimed is NULL LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
 
@@ -1281,6 +1281,66 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Equal_False(ctx context.Context) (
 		}
 		return wallet, nil
 	}
+
+}
+
+func (obj *pgxImpl) Count_Wallet_Address(ctx context.Context) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets")
+
+	var __values []interface{}
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&count)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
+func (obj *pgxImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is not NULL")
+
+	var __values []interface{}
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&count)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
+func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is NULL")
+
+	var __values []interface{}
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&count)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
 
 }
 
@@ -1442,6 +1502,33 @@ func (rx *Rx) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	return tx.All_BlockHeader_OrderBy_Desc_Timestamp(ctx)
 }
 
+func (rx *Rx) Count_Wallet_Address(ctx context.Context) (
+	count int64, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Count_Wallet_Address(ctx)
+}
+
+func (rx *Rx) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+	count int64, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Count_Wallet_By_Claimed_IsNot_Null(ctx)
+}
+
+func (rx *Rx) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+	count int64, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Count_Wallet_By_Claimed_Is_Null(ctx)
+}
+
 func (rx *Rx) Create_BlockHeader(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field,
 	block_header_number BlockHeader_Number_Field,
@@ -1487,13 +1574,13 @@ func (rx *Rx) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
 	return tx.First_BlockHeader_By_Timestamp_Greater(ctx, block_header_timestamp_greater)
 }
 
-func (rx *Rx) First_Wallet_By_Claimed_Equal_False(ctx context.Context) (
+func (rx *Rx) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.First_Wallet_By_Claimed_Equal_False(ctx)
+	return tx.First_Wallet_By_Claimed_Is_Null(ctx)
 }
 
 func (rx *Rx) Get_BlockHeader_By_Hash(ctx context.Context,
@@ -1541,6 +1628,15 @@ type Methods interface {
 	All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 		rows []*BlockHeader, err error)
 
+	Count_Wallet_Address(ctx context.Context) (
+		count int64, err error)
+
+	Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+		count int64, err error)
+
+	Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+		count int64, err error)
+
 	Create_BlockHeader(ctx context.Context,
 		block_header_hash BlockHeader_Hash_Field,
 		block_header_number BlockHeader_Number_Field,
@@ -1560,7 +1656,7 @@ type Methods interface {
 		block_header_timestamp_greater BlockHeader_Timestamp_Field) (
 		block_header *BlockHeader, err error)
 
-	First_Wallet_By_Claimed_Equal_False(ctx context.Context) (
+	First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 		wallet *Wallet, err error)
 
 	Get_BlockHeader_By_Hash(ctx context.Context,

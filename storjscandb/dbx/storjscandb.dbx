@@ -58,3 +58,16 @@ read first (
     where wallet.claimed = null
 )
 
+read count (
+    select wallet.address
+)
+
+read count (
+    select wallet
+    where wallet.claimed != null
+)
+
+read count (
+        select wallet
+        where wallet.claimed = null
+)
