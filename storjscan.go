@@ -6,6 +6,7 @@ package storjscan
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/spacemonkeygo/monkit/v3"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ import (
 	"storj.io/private/debug"
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/tokens"
 )
 
@@ -28,6 +30,8 @@ type Config struct {
 
 // DB is a collection of storjscan databases.
 type DB interface {
+	// Headers creates headers database methods.
+	Headers() blockchain.HeadersDB
 }
 
 // App is the storjscan process that runs API endpoint.
@@ -41,6 +45,10 @@ type App struct {
 	Debug struct {
 		Listener net.Listener
 		Server   *debug.Server
+	}
+
+	Blockchain struct {
+		HeadersCache *blockchain.HeadersCache
 	}
 
 	Tokens struct {
@@ -63,15 +71,25 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		Servers: lifecycle.NewGroup(log.Named("servers")),
 	}
 
+	{ // blockchain
+		app.Blockchain.HeadersCache = blockchain.NewHeadersCache(log.Named("blockchain:headers-cache"),
+			app.DB.Headers(),
+			config.Tokens.Endpoint,
+			15*time.Second,
+			5*time.Minute,
+			30,
+			3)
+	}
+
 	{ // tokens
-		token, err := tokens.AddressFromHex(config.Tokens.TokenAddress)
+		token, err := blockchain.AddressFromHex(config.Tokens.Contract)
 		if err != nil {
 			return nil, err
 		}
 
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
-			config.Tokens.Endpoint,
-			token)
+			config.Tokens.Endpoint, token,
+			app.Blockchain.HeadersCache)
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}

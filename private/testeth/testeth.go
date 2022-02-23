@@ -14,7 +14,7 @@ import (
 // Run creates Ethereum test network with deployed test token and executes test function.
 func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *Network)) {
 	t.Run("Ethereum", func(t *testing.T) {
-		t.Parallel()
+		//t.Parallel()
 		ctx := testcontext.New(t)
 		defer ctx.Cleanup()
 

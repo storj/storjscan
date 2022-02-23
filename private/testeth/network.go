@@ -81,6 +81,7 @@ func NewNetwork() (*Network, error) {
 			Balance: new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether)),
 		}
 	}
+	genesis.Timestamp = 1577829600
 
 	// eth config
 	ethConfig := ethconfig.Defaults
@@ -106,6 +107,11 @@ func (network *Network) Ethereum() *eth.Ethereum {
 // Accounts returns available accounts, with first one being coinbase account.
 func (network *Network) Accounts() []accounts.Account {
 	return network.keystore.Accounts()
+}
+
+// EtherbaseWallet returns etherbase wallet.
+func (network *Network) EtherbaseWallet() (accounts.Wallet, error) {
+	return network.ethereum.AccountManager().Find(network.developer)
 }
 
 // Dial creates new Ethereum client connected to in-process API handler.
