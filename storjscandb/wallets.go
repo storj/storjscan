@@ -21,38 +21,19 @@ type WalletsDB struct {
 	db *dbx.DB
 }
 
-// Wallet ...
+// Wallet represents an entry in the wallets table.
 type Wallet struct {
 	Address []byte
 	Claimed time.Time
 }
 
-// Create ...
+// Create inserts a new entry in the wallets table.
 func (wallets *WalletsDB) Create(ctx context.Context, address []byte) (Wallet, error) {
 	w, err := wallets.db.Create_Wallet(ctx, dbx.Wallet_Address(address), dbx.Wallet_Create_Fields{})
 	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
 }
 
-// Claim ...
-func (wallets *WalletsDB) Claim(ctx context.Context, address []byte) (Wallet, error) {
-	claimedAt := dbx.Wallet_Claimed(time.Now())
-	w, err := wallets.db.Update_Wallet_By_Address(ctx, dbx.Wallet_Address(address), dbx.Wallet_Update_Fields{Claimed: claimedAt})
-	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
-}
-
-// Get...
-func (wallets *WalletsDB) Get(ctx context.Context, address []byte) (Wallet, error) {
-	w, err := wallets.db.Get_Wallet_By_Address(ctx, dbx.Wallet_Address(address))
-	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
-}
-
-// GetNextAvailable ...
-func (wallets *WalletsDB) GetNextAvailable(ctx context.Context) (Wallet, error) {
-	w, err := wallets.db.First_Wallet_By_Claimed_Is_Null(ctx)
-	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
-}
-
-// CreateBatch ...
+// CreateBatch inserts a new db entry for each address.
 func (wallets *WalletsDB) CreateBatch(ctx context.Context, addresses [][]byte) (err error) {
 	err = wallets.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
 		for _, address := range addresses {
@@ -66,13 +47,32 @@ func (wallets *WalletsDB) CreateBatch(ctx context.Context, addresses [][]byte) (
 	return ErrWalletsDB.Wrap(err)
 }
 
-// TotalCount ...
+// Get queries the wallets table for the information stored for a given address
+func (wallets *WalletsDB) Get(ctx context.Context, address []byte) (Wallet, error) {
+	w, err := wallets.db.Get_Wallet_By_Address(ctx, dbx.Wallet_Address(address))
+	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
+}
+
+// GetNextAvailable returns the first unclaimed wallet address.
+func (wallets *WalletsDB) GetNextAvailable(ctx context.Context) (Wallet, error) {
+	w, err := wallets.db.First_Wallet_By_Claimed_Is_Null(ctx)
+	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
+}
+
+// Claim sets the timestamp at which a wallet address is claimed.
+func (wallets *WalletsDB) Claim(ctx context.Context, address []byte) (Wallet, error) {
+	claimedAt := dbx.Wallet_Claimed(time.Now())
+	w, err := wallets.db.Update_Wallet_By_Address(ctx, dbx.Wallet_Address(address), dbx.Wallet_Update_Fields{Claimed: claimedAt})
+	return Wallet{Address: w.Address, Claimed: *w.Claimed}, ErrWalletsDB.Wrap(err)
+}
+
+// TotalCount returns the total number of rows in the wallets table.
 func (wallets *WalletsDB) TotalCount(ctx context.Context) (count int64, err error) {
 	count, err = wallets.db.Count_Wallet_Address(ctx)
 	return count, ErrWalletsDB.Wrap(err)
 }
 
-// Count ...
+// Count returns either the number of claimed or unclaimed wallet addresses in the table, as specified.
 func (wallets *WalletsDB) Count(ctx context.Context, claimed bool) (count int64, err error) {
 	if claimed {
 		count, err = wallets.db.Count_Wallet_By_Claimed_IsNot_Null(ctx)
