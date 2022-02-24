@@ -60,7 +60,6 @@ type App struct {
 		Service  *wallets.Wallets
 		Endpoint *wallets.Endpoint
 	}
-
 }
 
 // NewApp creates new storjscan application instance.

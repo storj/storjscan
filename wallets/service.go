@@ -18,7 +18,7 @@ import (
 var mon = monkit.Package()
 
 // ErrWalletsService indicates about internal wallets service error.
-var ErrWalletsService = errs.Class("WalletsService")
+var ErrWalletsService = errs.Class("Wallets Service")
 
 // Wallet is the interface for storj token deposit addresses.
 //

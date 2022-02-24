@@ -13,7 +13,7 @@ import (
 )
 
 // ErrEndpoint is the wallets endpoint error class.
-var ErrEndpoint = errs.Class("tokens endpoint")
+var ErrEndpoint = errs.Class("Wallets Endpoint")
 
 // Endpoint for interacting with the Wallets service.
 //
@@ -40,7 +40,7 @@ func (endpoint *Endpoint) Register(router *mux.Router) {
 }
 
 // GetNewDepositAddress returns
-func(endpoint *Endpoint) GetNewDepositAddress(w http.ResponseWriter, r *http.Request){
+func (endpoint *Endpoint) GetNewDepositAddress(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
 	defer mon.Task()(&ctx)(&err)
@@ -58,7 +58,7 @@ func(endpoint *Endpoint) GetNewDepositAddress(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func(endpoint *Endpoint) GetCountDepositAddresses(w http.ResponseWriter, r *http.Request){
+func (endpoint *Endpoint) GetCountDepositAddresses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
 	defer mon.Task()(&ctx)(&err)
@@ -76,7 +76,7 @@ func(endpoint *Endpoint) GetCountDepositAddresses(w http.ResponseWriter, r *http
 	}
 }
 
-func(endpoint *Endpoint) GetCountClaimedDepositAddresses(w http.ResponseWriter, r *http.Request){
+func (endpoint *Endpoint) GetCountClaimedDepositAddresses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
 	defer mon.Task()(&ctx)(&err)
@@ -94,7 +94,7 @@ func(endpoint *Endpoint) GetCountClaimedDepositAddresses(w http.ResponseWriter, 
 	}
 }
 
-func(endpoint *Endpoint) GetCountUnclaimedDepositAddresses(w http.ResponseWriter, r *http.Request){
+func (endpoint *Endpoint) GetCountUnclaimedDepositAddresses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
 	defer mon.Task()(&ctx)(&err)
@@ -111,7 +111,6 @@ func(endpoint *Endpoint) GetCountUnclaimedDepositAddresses(w http.ResponseWriter
 		return
 	}
 }
-
 
 // serveJSONError writes JSON error to response output stream.
 func (endpoint *Endpoint) serveJSONError(w http.ResponseWriter, status int, err error) {

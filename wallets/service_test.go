@@ -7,4 +7,14 @@ import (
 	"testing"
 )
 
-func TestNewDepositAddress(t *testing.T) {}
+func TestGetNewDepositAddress(t *testing.T) {
+//TODO
+}
+
+func TestGetCountDepositAddresses(t *testing.T) {
+//TODO
+}
+
+func TestGetCountClaimedDepositAddresses(t *testing.T) {
+//TODO
+}
