@@ -56,39 +56,39 @@ func TestEndpoint(t *testing.T) {
 	var returnAcct wallets.Account
 
 	cases := []struct {
-		desc      string
-		url       string
-		expected  interface{}
+		desc       string
+		url        string
+		expected   interface{}
 		returnType string
 	}{
 		{
-			desc:      "GetCountDepositAddresses",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count", lis.Addr().String()),
-			expected:  2,
+			desc:       "GetCountDepositAddresses",
+			url:        fmt.Sprintf("http://%s/api/v0/example/wallets/count", lis.Addr().String()),
+			expected:   2,
 			returnType: "count",
 		},
 		{
-			desc:      "GetNewDepositAddress",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/", lis.Addr().String()),
-			expected:  addr,
+			desc:       "GetNewDepositAddress",
+			url:        fmt.Sprintf("http://%s/api/v0/example/wallets/", lis.Addr().String()),
+			expected:   addr,
 			returnType: "address",
 		},
 		{
-			desc:      "GetAccount",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/%s", lis.Addr().String(), addresshex),
-			expected:  addr,
+			desc:       "GetAccount",
+			url:        fmt.Sprintf("http://%s/api/v0/example/wallets/%s", lis.Addr().String(), addresshex),
+			expected:   addr,
 			returnType: "account",
 		},
 		{
-			desc:      "GetCountClaimedDepositAddresses",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count/claimed", lis.Addr().String()),
-			expected:  1,
+			desc:       "GetCountClaimedDepositAddresses",
+			url:        fmt.Sprintf("http://%s/api/v0/example/wallets/count/claimed", lis.Addr().String()),
+			expected:   1,
 			returnType: "count",
 		},
 		{
-			desc:      "GetCountUnclaimedDepositAddresses",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count/unclaimed", lis.Addr().String()),
-			expected:  1,
+			desc:       "GetCountUnclaimedDepositAddresses",
+			url:        fmt.Sprintf("http://%s/api/v0/example/wallets/count/unclaimed", lis.Addr().String()),
+			expected:   1,
 			returnType: "count",
 		},
 	}
@@ -101,7 +101,7 @@ func TestEndpoint(t *testing.T) {
 			require.NoError(t, err)
 			defer ctx.Check(func() error { return resp.Body.Close() })
 			require.Equal(t, http.StatusOK, resp.StatusCode)
-			if tc.returnType == "count"{
+			if tc.returnType == "count" {
 				err = json.NewDecoder(resp.Body).Decode(&returnCount)
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, returnCount)

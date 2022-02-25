@@ -78,6 +78,7 @@ func (endpoint *Endpoint) GetCountDepositAddresses(w http.ResponseWriter, r *htt
 		return
 	}
 }
+
 // GetCountClaimedDepositAddresses returns the  number of claimed deposit addresses in the storjscan database.
 func (endpoint *Endpoint) GetCountClaimedDepositAddresses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -117,7 +118,7 @@ func (endpoint *Endpoint) GetCountUnclaimedDepositAddresses(w http.ResponseWrite
 }
 
 // GetAccount returns available info about the address provided.
-func (endpoint *Endpoint) GetAccount(w http.ResponseWriter, r *http.Request){
+func (endpoint *Endpoint) GetAccount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
 	defer mon.Task()(&ctx)(&err)
@@ -141,7 +142,6 @@ func (endpoint *Endpoint) GetAccount(w http.ResponseWriter, r *http.Request){
 		return
 	}
 }
-
 
 // serveJSONError writes JSON error to response output stream.
 func (endpoint *Endpoint) serveJSONError(w http.ResponseWriter, status int, err error) {

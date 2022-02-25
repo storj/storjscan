@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap/zaptest"
 	"storj.io/common/testcontext"
 	"storj.io/private/dbutil/pgtest"
-
 )
 
 func TestService(t *testing.T) {
@@ -34,7 +33,7 @@ func TestService(t *testing.T) {
 
 	expectedAddr, err := service.Setup(ctx, 10)
 	require.NoError(t, err)
-	total, err :=service.GetCountDepositAddresses(ctx)
+	total, err := service.GetCountDepositAddresses(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 10, total)
 	c, err := service.GetCountClaimedDepositAddresses(ctx, true)
@@ -44,7 +43,7 @@ func TestService(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 10, c)
 
-	addr,err := service.GetNewDepositAddress(ctx)
+	addr, err := service.GetNewDepositAddress(ctx)
 	require.NoError(t, err)
 	require.Equal(t, expectedAddr, addr) //Is there a better way to compare byte slice equality?
 

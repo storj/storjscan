@@ -33,7 +33,7 @@ type Wallets interface {
 	// GetAccount returns the info related to an address
 	GetAccount(ctx context.Context, address []byte) (Account, error)
 	// Setup is used to create wallets for test purposes
-	Setup(ctx context.Context, size int)([]byte,error)
+	Setup(ctx context.Context, size int) ([]byte, error)
 }
 
 // Account represents an account within the overarching hd wallet.
@@ -80,13 +80,15 @@ func (hd *HD) GetCountClaimedDepositAddresses(ctx context.Context, claimed bool)
 }
 
 // GetAccount returns the info related to an address.
-func (hd *HD) GetAccount(ctx context.Context, address []byte) (account Account, err error){
+func (hd *HD) GetAccount(ctx context.Context, address []byte) (account Account, err error) {
 	a, err := hd.db.Get(ctx, address)
 	return Account{Address: a.Address, Claimed: &a.Claimed}, ErrWalletsService.Wrap(err)
 }
 
 // Setup is used to create wallets for test purposes.
-func (hd *HD) Setup(ctx context.Context, size int) (firstAddr []byte, err error) {return firstAddr, err}
+func (hd *HD) Setup(ctx context.Context, size int) (firstAddr []byte, err error) {
+	return firstAddr, err
+}
 
 //--- Implementation for testing ---//
 
@@ -150,7 +152,6 @@ func (hd *HD_test) Setup(ctx context.Context, size int) (firstAddr []byte, err e
 	return firstAddr, ErrWalletsService.Wrap(err)
 }
 
-
 //--- helper methods for hd_test. NB: similar functions will be in a command line tool for production. ---/
 func (hd *HD_test) generateNewAccounts(ctx context.Context, size int) (firstAddr []byte, err error) {
 	var addresses [][]byte
@@ -173,4 +174,3 @@ func (hd *HD_test) generateNewAccounts(ctx context.Context, size int) (firstAddr
 	firstAddr = addresses[0]
 	return firstAddr, ErrWalletsService.Wrap(err)
 }
-
