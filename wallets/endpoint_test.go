@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"storj.io/common/testcontext"
@@ -47,45 +48,48 @@ func TestEndpoint(t *testing.T) {
 	})
 	defer ctx.Check(apiServer.Close)
 
-	// TODO add 2 addresses to db
-
+	addr, err := service.Setup(ctx, 2)
+	require.NoError(t, err)
+	addresshex := hexutil.Encode(addr)
 	var returnAddr []byte
 	var returnCount int
+	var returnAcct wallets.Account
+
 	cases := []struct {
 		desc      string
 		url       string
 		expected  interface{}
-		returnVal interface{}
+		returnType string
 	}{
 		{
 			desc:      "GetCountDepositAddresses",
 			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count", lis.Addr().String()),
 			expected:  2,
-			returnVal: returnCount,
-		},
-		{
-			desc:      "GetCountUnclaimedDepositAddresses",
-			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count/unclaimed", lis.Addr().String()),
-			expected:  2,
-			returnVal: returnCount,
+			returnType: "count",
 		},
 		{
 			desc:      "GetNewDepositAddress",
 			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/", lis.Addr().String()),
-			expected:  []byte{},
-			returnVal: returnAddr,
+			expected:  addr,
+			returnType: "address",
+		},
+		{
+			desc:      "GetAccount",
+			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/%s", lis.Addr().String(), addresshex),
+			expected:  addr,
+			returnType: "account",
 		},
 		{
 			desc:      "GetCountClaimedDepositAddresses",
 			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count/claimed", lis.Addr().String()),
 			expected:  1,
-			returnVal: returnCount,
+			returnType: "count",
 		},
 		{
 			desc:      "GetCountUnclaimedDepositAddresses",
 			url:       fmt.Sprintf("http://%s/api/v0/example/wallets/count/unclaimed", lis.Addr().String()),
 			expected:  1,
-			returnVal: returnCount,
+			returnType: "count",
 		},
 	}
 	for _, tc := range cases {
@@ -97,9 +101,20 @@ func TestEndpoint(t *testing.T) {
 			require.NoError(t, err)
 			defer ctx.Check(func() error { return resp.Body.Close() })
 			require.Equal(t, http.StatusOK, resp.StatusCode)
-			err = json.NewDecoder(resp.Body).Decode(tc.returnVal)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, tc.returnVal)
+			if tc.returnType == "count"{
+				err = json.NewDecoder(resp.Body).Decode(&returnCount)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, returnCount)
+			} else if tc.returnType == "address" {
+				err = json.NewDecoder(resp.Body).Decode(&returnAddr)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, returnAddr)
+			} else if tc.returnType == "account" {
+				err = json.NewDecoder(resp.Body).Decode(&returnAcct)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, returnAcct.Address)
+				require.NotNil(t, returnAcct.Claimed)
+			}
 		})
 	}
 }

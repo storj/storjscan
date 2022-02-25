@@ -30,12 +30,16 @@ type Wallets interface {
 	GetCountDepositAddresses(ctx context.Context) (int, error)
 	// GetCountClaimedDepositAddresses returns the number of claimed or unclaimed deposit addresses.
 	GetCountClaimedDepositAddresses(ctx context.Context, claimed bool) (int, error)
+	// GetAccount returns the info related to an address
+	GetAccount(ctx context.Context, address []byte) (Account, error)
+	// Setup is used to create wallets for test purposes
+	Setup(ctx context.Context, size int)([]byte,error)
 }
 
 // Account represents an account within the overarching hd wallet.
 type Account struct {
-	address []byte
-	claimed time.Time
+	Address []byte
+	Claimed *time.Time
 }
 
 // HD implements Wallet interface. Represents hierarchical deterministic wallets. Production Version.
@@ -75,6 +79,15 @@ func (hd *HD) GetCountClaimedDepositAddresses(ctx context.Context, claimed bool)
 	return int(c), ErrWalletsService.Wrap(err)
 }
 
+// GetAccount returns the info related to an address.
+func (hd *HD) GetAccount(ctx context.Context, address []byte) (account Account, err error){
+	a, err := hd.db.Get(ctx, address)
+	return Account{Address: a.Address, Claimed: &a.Claimed}, ErrWalletsService.Wrap(err)
+}
+
+// Setup is used to create wallets for test purposes.
+func (hd *HD) Setup(ctx context.Context, size int) (firstAddr []byte, err error) {return firstAddr, err}
+
 //--- Implementation for testing ---//
 
 // HD_test implements Wallet interface. Represents hierarchical deterministic wallets.
@@ -84,7 +97,7 @@ type HD_test struct {
 	wallet *mm.Wallet
 }
 
-// NewHD_test creates a new HD_test struct
+// NewHD_test creates a new HD_test struct.
 func NewHD_test(log *zap.Logger, db *storjscandb.WalletsDB) (*HD_test, error) {
 	seed, err := mm.NewSeed()
 	if err != nil {
@@ -124,18 +137,22 @@ func (hd *HD_test) GetCountClaimedDepositAddresses(ctx context.Context, claimed 
 	return int(c), ErrWalletsService.Wrap(err)
 }
 
-//--- helper methods for hd_test. NB: similar functions will be in a command line tool for production. ---/
-func (hd *HD_test) newAccount(ctx context.Context) (address []byte, err error) {
-	account, err := hd.wallet.Derive(mm.DefaultBaseDerivationPath, false) //do we want to pin this account to the wallet?
-	if err != nil {
-		return address, ErrWalletsService.Wrap(err)
-	}
-	address, err = hd.wallet.AddressBytes(account)
-	wallet, err := hd.db.Create(ctx, address)
-	return wallet.Address, ErrWalletsService.Wrap(err)
+// GetAccount returns the info related to an address.
+func (hd *HD_test) GetAccount(ctx context.Context, address []byte) (account Account, err error) {
+	a, err := hd.db.Get(ctx, address)
+	return Account{Address: a.Address, Claimed: &a.Claimed}, ErrWalletsService.Wrap(err)
 }
 
-func (hd *HD_test) generateNewBatch(ctx context.Context, size int) error {
+// Setup is used to create wallets for test purposes.
+// Is there a better way to do this?
+func (hd *HD_test) Setup(ctx context.Context, size int) (firstAddr []byte, err error) {
+	firstAddr, err = hd.generateNewAccounts(ctx, size)
+	return firstAddr, ErrWalletsService.Wrap(err)
+}
+
+
+//--- helper methods for hd_test. NB: similar functions will be in a command line tool for production. ---/
+func (hd *HD_test) generateNewAccounts(ctx context.Context, size int) (firstAddr []byte, err error) {
 	var addresses [][]byte
 	next := acc.DefaultIterator(mm.DefaultBaseDerivationPath)
 	for i := 0; i < size; i++ {
@@ -149,11 +166,11 @@ func (hd *HD_test) generateNewBatch(ctx context.Context, size int) error {
 		}
 		addresses = append(addresses, address)
 	}
-	err := hd.db.CreateBatch(ctx, addresses)
-	return ErrWalletsService.Wrap(err)
+	if len(addresses) < 1 {
+		return firstAddr, ErrWalletsService.New("no addresses created")
+	}
+	err = hd.db.CreateBatch(ctx, addresses)
+	firstAddr = addresses[0]
+	return firstAddr, ErrWalletsService.Wrap(err)
 }
 
-func (hd *HD_test) getAccount(ctx context.Context, address []byte) (account Account, err error) {
-	a, err := hd.db.Get(ctx, address)
-	return Account{address: a.Address, claimed: a.Claimed}, ErrWalletsService.Wrap(err)
-}
