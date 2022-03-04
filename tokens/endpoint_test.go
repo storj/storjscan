@@ -4,6 +4,7 @@
 package tokens_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -27,7 +28,7 @@ import (
 )
 
 func TestEndpoint(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, nil, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		connStr := pgtest.PickPostgres(t)
 
@@ -73,6 +74,7 @@ func TestEndpoint(t *testing.T) {
 			lis.Addr().String(), accounts[1].Address.String())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
+		req.Header.Add("STORJSCAN_API_KEY", base64.URLEncoding.EncodeToString(apiKey.Bytes()))
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

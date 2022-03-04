@@ -119,8 +119,12 @@ func (headerSearch *HeaderSearch) After(ctx context.Context, t time.Time) (_ Hea
 		return Header{}, ErrHeaderCache.Wrap(err)
 	}
 
-	blockNumber := startBlock.Number.Int64()
 	blockTime := time.Unix(int64(startBlock.Time), 0)
+	if t.After(blockTime) {
+		return Header{}, ErrHeaderCache.New("requested time is after most recent block")
+	}
+
+	blockNumber := startBlock.Number.Int64()
 	delta := blockTime.Sub(t)
 
 	for i := 0; i < headerSearch.searchLimit; i++ {

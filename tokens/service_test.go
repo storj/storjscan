@@ -22,7 +22,7 @@ import (
 )
 
 func TestPayments(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, nil, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		connStr := pgtest.PickPostgres(t)
 

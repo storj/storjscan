@@ -161,14 +161,13 @@ func TestHeadersCacheMissingHeader(t *testing.T) {
 }
 
 func TestHeaderSearchAfter(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, testeth.DisableDeployContract, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		chain := network.Ethereum().BlockChain()
 		chainDB := network.Ethereum().ChainDb()
 		wallet, err := network.EtherbaseWallet()
 		require.NoError(t, err)
 
-		require.NoError(t, chain.Reset())
 		genesisBlock := chain.CurrentBlock()
 		s := time.Unix(int64(genesisBlock.Time()), 0)
 

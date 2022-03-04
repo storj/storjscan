@@ -94,9 +94,7 @@ func (server *Server) authorize(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if err != nil {
-			server.log.Error("failed to decode API key string", zap.Error(Error.Wrap(err)))
-		}
+
 		w.WriteHeader(http.StatusUnauthorized)
 
 		var response struct {

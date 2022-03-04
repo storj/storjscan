@@ -12,10 +12,29 @@ import (
 	"storj.io/common/testcontext"
 )
 
+// Config holds testeth.Run configuration
+type Config struct {
+	DeployContract bool
+}
+
+// Reconfigure allows to change config values.
+type Reconfigure func(config *Config)
+
+// DisableDeployContract disables contract deployment.
+func DisableDeployContract(config *Config) {
+	config.DeployContract = false
+}
+
 // Run creates Ethereum test network with deployed test token and executes test function.
-func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *Network)) {
+func Run(t *testing.T, reconfigure Reconfigure, test func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *Network)) {
+	config := Config{
+		DeployContract: true,
+	}
+	if reconfigure != nil {
+		reconfigure(&config)
+	}
+
 	t.Run("Ethereum", func(t *testing.T) {
-		//t.Parallel()
 		ctx := testcontext.NewWithTimeout(t, 10*time.Minute)
 		defer ctx.Cleanup()
 
@@ -29,9 +48,12 @@ func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, tokenAd
 			t.Fatal(err)
 		}
 
-		tokenAddress, err := DeployToken(ctx, network, 1000000)
-		if err != nil {
-			t.Fatal(err)
+		var tokenAddress common.Address
+		if config.DeployContract {
+			tokenAddress, err = DeployToken(ctx, network, 1000000)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		test(ctx, t, tokenAddress, network)

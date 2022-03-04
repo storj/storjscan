@@ -15,13 +15,12 @@ import (
 )
 
 func TestBlockGen(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, testeth.DisableDeployContract, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		chain := network.Ethereum().BlockChain()
 		chainDB := network.Ethereum().ChainDb()
 		wallet, err := network.EtherbaseWallet()
 		require.NoError(t, err)
 
-		require.NoError(t, chain.Reset())
 		genesisBlock := chain.CurrentBlock()
 
 		const count = 1000

@@ -16,7 +16,7 @@ import (
 )
 
 func TestWalletsUnlocked(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, testeth.DisableDeployContract, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		client := network.Dial()
 		defer client.Close()
 
@@ -34,7 +34,7 @@ func TestWalletsUnlocked(t *testing.T) {
 }
 
 func TestTokenInitialSupply(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, nil, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		client := network.Dial()
 		defer client.Close()
 
