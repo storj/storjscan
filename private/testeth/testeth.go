@@ -12,7 +12,7 @@ import (
 	"storj.io/common/testcontext"
 )
 
-// Config holds testeth.Run configuration
+// Config holds testeth.Run configuration.
 type Config struct {
 	DeployContract bool
 }
