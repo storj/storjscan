@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	// BlockGenError is chain generator error class.
-	BlockGenError = errs.Class("BlockGen")
+	// ErrBlockGen is chain generator error class.
+	ErrBlockGen = errs.Class("BlockGen")
 
 	// Ensure chainHeaderReader implements ChainHeaderReader.
 	_ consensus.ChainHeaderReader = (*chainHeaderReader)(nil)
@@ -64,7 +64,7 @@ func (blockGen *BlockGen) GenerateChain(ctx context.Context, parent *types.Heade
 
 	block, err := blockGen.CreateBlock(parent, delay)
 	if err != nil {
-		return nil, err
+		return nil, ErrBlockGen.Wrap(err)
 	}
 	blocks = append(blocks, block)
 
@@ -78,7 +78,7 @@ func (blockGen *BlockGen) GenerateChain(ctx context.Context, parent *types.Heade
 		h := blocks[i-1].Header()
 		block, err := blockGen.CreateBlock(h, delay)
 		if err != nil {
-			return nil, err
+			return nil, ErrBlockGen.Wrap(err)
 		}
 		blocks = append(blocks, block)
 	}
@@ -101,23 +101,23 @@ func (blockGen *BlockGen) CreateBlock(parent *types.Header, delay time.Duration)
 	}
 	err := blockGen.engine.Prepare(chainReader, header)
 	if err != nil {
-		return nil, BlockGenError.Wrap(err)
+		return nil, ErrBlockGen.Wrap(err)
 	}
 	header.Time = uint64(time.Unix(int64(parent.Time), 0).Add(delay).Unix())
 
 	statedb, err := state.New(parent.Root, state.NewDatabase(blockGen.db), nil)
 	if err != nil {
-		return nil, BlockGenError.Wrap(err)
+		return nil, ErrBlockGen.Wrap(err)
 	}
 	block, err := blockGen.engine.FinalizeAndAssemble(blockGen.headers, header, statedb, nil, nil, nil)
 	if err != nil {
-		return nil, BlockGenError.Wrap(err)
+		return nil, ErrBlockGen.Wrap(err)
 	}
 
 	header = block.Header()
 	sig, err := blockGen.signer.SignData(blockGen.signer.Accounts()[0], accounts.MimetypeClique, clique.CliqueRLP(header))
 	if err != nil {
-		return nil, BlockGenError.Wrap(err)
+		return nil, ErrBlockGen.Wrap(err)
 	}
 	copy(header.Extra[len(header.Extra)-crypto.SignatureLength:], sig)
 
