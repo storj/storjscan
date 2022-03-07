@@ -53,6 +53,11 @@ pipeline {
                         sh 'go test -v -p 16 -bench XYZXYZXYZXYZ -run XYZXYZXYZXYZ -race ./...'
                     }
                 }
+                stage('db') {
+                   steps {
+                       sh 'service postgresql start'
+                   }
+                }
             }
         }
 
@@ -73,9 +78,11 @@ pipeline {
                 }
                 stage('Tests') {
                     environment {
+                        STORJ_TEST_POSTGRES = 'postgres://postgres@localhost/teststorjscan?sslmode=disable'
                         COVERFLAGS = "${ env.BRANCH_NAME == 'main' ? '-coverprofile=.build/coverprofile -coverpkg=storj.io/storjscan/...' : ''}"
                     }
                     steps {
+                        sh 'psql -U postgres -c \'create database teststorjscan;\''
                         sh 'go test -parallel 4 -p 6 -vet=off $COVERFLAGS -timeout 8m -json -race ./... 2>&1 | tee .build/tests.json | xunit -out .build/tests.xml'
                     }
 
