@@ -35,7 +35,7 @@ func TestBlockGen(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, count, n)
 
-		td := time.Now().Sub(ts)
+		td := time.Since(ts)
 		t.Log("Generate and insert chain duration:", td)
 
 		newHead := chain.CurrentBlock().Header()
