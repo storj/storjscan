@@ -76,7 +76,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	for iter.Next() {
 		cached, ok, err := service.headers.Get(ctx, iter.Event.Raw.BlockHash)
 		if err != nil {
-			return payments, err
+			return payments, ErrService.Wrap(err)
 		}
 
 		var timestamp time.Time
@@ -87,7 +87,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 
 			header, err := client.HeaderByHash(ctx, iter.Event.Raw.BlockHash)
 			if err != nil {
-				return payments, err
+				return payments, ErrService.Wrap(err)
 			}
 
 			timestamp = time.Unix(int64(header.Time), 0)
@@ -103,5 +103,5 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 		})
 	}
 
-	return payments, iter.Error()
+	return payments, ErrService.Wrap(iter.Error())
 }

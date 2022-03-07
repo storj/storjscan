@@ -81,7 +81,6 @@ func (headersCache *HeadersCache) Get(ctx context.Context, hash Hash) (Header, b
 // HeaderSearch is block header search context.
 type HeaderSearch struct {
 	log         *zap.Logger
-	db          HeadersDB
 	endpoint    string
 	blockTime   time.Duration
 	threshold   time.Duration
