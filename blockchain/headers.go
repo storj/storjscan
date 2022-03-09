@@ -44,8 +44,6 @@ type HeadersDB interface {
 	Get(ctx context.Context, hash Hash) (Header, error)
 	// GetByNumber retrieves header by number.
 	GetByNumber(ctx context.Context, number int64) (Header, error)
-	// After retrieves block header which block timestamp is after provided time.
-	After(ctx context.Context, t time.Time) (Header, error)
 	// List retrieves all headers stored in cache db.
 	List(ctx context.Context) ([]Header, error)
 }

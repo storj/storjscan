@@ -77,19 +77,6 @@ func (headers *headersDB) GetByNumber(ctx context.Context, number int64) (blockc
 	return fromDBXHeader(dbxHeader), nil
 }
 
-// After retrieves block header which block timestamp is after provided time.
-func (headers *headersDB) After(ctx context.Context, t time.Time) (blockchain.Header, error) {
-	dbxHeader, err := headers.db.First_BlockHeader_By_Timestamp_Greater(ctx, dbx.BlockHeader_Timestamp(t))
-	if err != nil {
-		return blockchain.Header{}, ErrHeadersDB.Wrap(err)
-	}
-	if dbxHeader == nil {
-		return blockchain.Header{}, blockchain.ErrNoHeader
-	}
-
-	return fromDBXHeader(dbxHeader), nil
-}
-
 // List retrieves all block headers from the db.
 func (headers *headersDB) List(ctx context.Context) ([]blockchain.Header, error) {
 	dbxHeaders, err := headers.db.All_BlockHeader_OrderBy_Desc_Timestamp(ctx)
