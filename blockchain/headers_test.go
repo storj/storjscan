@@ -55,7 +55,7 @@ func TestHeadersDBGet(t *testing.T) {
 		header := blockchain.Header{
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    1,
-			Timestamp: time.Now().UTC(),
+			Timestamp: time.Now().Round(time.Microsecond).UTC(),
 		}
 
 		err = db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
@@ -80,7 +80,7 @@ func TestHeadersDBGet(t *testing.T) {
 
 func TestHeadersDBList(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
-		now := time.Now().Add(-time.Hour).UTC()
+		now := time.Now().Round(time.Microsecond).Add(-time.Hour).UTC()
 		var headers []blockchain.Header
 
 		// create block headers.
@@ -129,7 +129,7 @@ func TestHeadersCacheGet(t *testing.T) {
 		header := blockchain.Header{
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    1,
-			Timestamp: time.Now().UTC(),
+			Timestamp: time.Now().Round(time.Microsecond).UTC(),
 		}
 
 		err = db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
