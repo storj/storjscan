@@ -18,31 +18,20 @@ import (
 
 	"storj.io/common/testcontext"
 	"storj.io/common/uuid"
-	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
-	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
-	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokens"
 )
 
 func TestEndpoint(t *testing.T) {
 	testeth.Run(t, nil, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
-		connStr := pgtest.PickPostgres(t)
 
-		db, err := storjscandbtest.OpenDB(ctx, logger, connStr, t.Name(), "T")
-		require.NoError(t, err)
-		defer ctx.Check(db.Close)
-		err = db.MigrateToLatest(ctx)
-		require.NoError(t, err)
-
-		cache := blockchain.NewHeadersCache(logger, db.Headers())
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 
-		service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress, cache)
+		service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress)
 		endpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
 
 		apiKey, err := uuid.New()

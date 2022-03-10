@@ -33,16 +33,14 @@ type Service struct {
 	log      *zap.Logger
 	endpoint string
 	token    blockchain.Address
-	headers  *blockchain.HeadersCache
 }
 
 // NewService creates new token service instance.
-func NewService(log *zap.Logger, endpoint string, token blockchain.Address, headers *blockchain.HeadersCache) *Service {
+func NewService(log *zap.Logger, endpoint string, token blockchain.Address) *Service {
 	return &Service{
 		log:      log,
 		endpoint: endpoint,
 		token:    token,
-		headers:  headers,
 	}
 }
 
@@ -74,32 +72,16 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 
 	var payments []Payment
 	for iter.Next() {
-		cached, ok, err := service.headers.Get(ctx, iter.Event.Raw.BlockHash)
+		header, err := client.HeaderByHash(ctx, iter.Event.Raw.BlockHash)
 		if err != nil {
 			return payments, ErrService.Wrap(err)
-		}
-
-		var timestamp time.Time
-		if !ok {
-			service.log.Info("Block header missing from cache",
-				zap.Int64("Number", int64(iter.Event.Raw.BlockNumber)),
-				zap.String("Hash", iter.Event.Raw.BlockHash.String()))
-
-			header, err := client.HeaderByHash(ctx, iter.Event.Raw.BlockHash)
-			if err != nil {
-				return payments, ErrService.Wrap(err)
-			}
-
-			timestamp = time.Unix(int64(header.Time), 0)
-		} else {
-			timestamp = cached.Timestamp
 		}
 
 		payments = append(payments, Payment{
 			From:        iter.Event.From,
 			TokenValue:  iter.Event.Value,
 			Transaction: iter.Event.Raw.TxHash,
-			Timestamp:   timestamp,
+			Timestamp:   time.Unix(int64(header.Time), 0),
 		})
 	}
 
