@@ -86,28 +86,20 @@ func (server *Server) Run(ctx context.Context) (err error) {
 	return Error.Wrap(group.Wait())
 }
 
-// authorize authorizes the request using the provided api key found in the request header.
+// authorize validates request authorisation using the provided api key found in the request header.
 func (server *Server) authorize(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := base64.URLEncoding.DecodeString(r.Header.Get("STORJSCAN_API_KEY"))
-		if err == nil && server.verifyAPIKey(apiKey) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		w.WriteHeader(http.StatusUnauthorized)
-
-		var response struct {
-			Error string `json:"error"`
-		}
-
-		response.Error = Error.New("Invalid API Key Provided").Error()
-
-		err = json.NewEncoder(w).Encode(response)
 		if err != nil {
-			server.log.Error("failed to write json error response", zap.Error(Error.Wrap(err)))
+			server.serveJSONError(w, http.StatusUnauthorized, Error.Wrap(err))
 			return
 		}
+		if !server.verifyAPIKey(apiKey) {
+			server.serveJSONError(w, http.StatusUnauthorized, Error.New("invalid api key provided"))
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -119,6 +111,22 @@ func (server *Server) verifyAPIKey(apiKey []byte) bool {
 		}
 	}
 	return false
+}
+
+// serveJSONError writes JSON error to response output stream.
+func (server *Server) serveJSONError(w http.ResponseWriter, status int, err error) {
+	w.WriteHeader(status)
+
+	var response struct {
+		Error string `json:"error"`
+	}
+	response.Error = err.Error()
+
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		server.log.Error("failed to write json error response", zap.Error(Error.Wrap(err)))
+		return
+	}
 }
 
 // Close closes server and underlying listener.
