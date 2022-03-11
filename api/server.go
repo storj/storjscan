@@ -86,7 +86,7 @@ func (server *Server) Run(ctx context.Context) (err error) {
 	return Error.Wrap(group.Wait())
 }
 
-// authorize validates request authorisation using the provided api key found in the request header.
+// authorize validates request authorization using the provided api key found in the request header.
 func (server *Server) authorize(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := base64.URLEncoding.DecodeString(r.Header.Get("STORJSCAN_API_KEY"))
