@@ -52,7 +52,7 @@ func (client *Client) ListBackwards(ctx context.Context, blockNumber, limit int6
 	return headers, nil
 }
 
-// ListForward list block headers backwards till limit is reached in one batch.
+// ListForward list block headers forward till limit is reached in one batch.
 func (client *Client) ListForward(ctx context.Context, blockNumber, limit int64) ([]Header, error) {
 	var batch batchRequest
 
