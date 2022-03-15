@@ -12,6 +12,11 @@
 *.out
 
 # Dependency directories (remove the comment below to include it)
-node_modules/
-build/
-.idea/
+node_modules
+
+# Build output directories
+build
+.build
+
+# IDEs local directories
+.idea
