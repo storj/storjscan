@@ -54,7 +54,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	}
 	defer client.Close()
 
-	token, err := erc20.NewErc20(service.token, client)
+	token, err := erc20.NewERC20(service.token, client)
 	if err != nil {
 		return nil, ErrService.Wrap(err)
 	}
