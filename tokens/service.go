@@ -51,7 +51,7 @@ func (service *Service) Payments(ctx context.Context, address Address) (_ []Paym
 	}
 	defer client.Close()
 
-	token, err := erc20.NewErc20(service.token, client)
+	token, err := erc20.NewERC20(service.token, client)
 	if err != nil {
 		return nil, ErrService.Wrap(err)
 	}
