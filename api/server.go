@@ -25,8 +25,8 @@ var Error = errs.Class("api server")
 
 // Config holds API endpoint configuration.
 type Config struct {
-	Address string
-	Keys    []string
+	Address string   `help:"public address to listen on" default:":10000"`
+	Keys    []string `help:"List of secrets to connect to service endpoints."`
 }
 
 // Server represents storjscan API web server.

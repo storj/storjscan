@@ -22,9 +22,10 @@ var mon = monkit.Package()
 
 // Config wraps storjscan configuration.
 type Config struct {
-	Debug  debug.Config
-	Tokens tokens.Config
-	API    api.Config
+	Debug    debug.Config
+	Tokens   tokens.Config
+	API      api.Config
+	Database string `help:"satellite database connection string" releaseDefault:"postgres://" devDefault:"postgres://"`
 }
 
 // DB is a collection of storjscan databases.

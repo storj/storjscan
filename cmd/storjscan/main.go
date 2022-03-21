@@ -7,31 +7,42 @@ import (
 	"context"
 	"log"
 
-	"github.com/spf13/pflag"
+	"github.com/spf13/cobra"
+
+	"storj.io/private/process"
+	"storj.io/storjscan/storjscandb"
+
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
 	"storj.io/private/cfgstruct"
 	"storj.io/storjscan"
-	"storj.io/storjscan/storjscandb"
 )
 
-// Flags contains storjscan app configuration.
-var Flags struct {
-	Database string
-	storjscan.Config
-}
+var (
+	rootCmd = &cobra.Command{
+		Use:   "storjscan",
+		Short: "STORJ token payment management service",
+	}
+	runCmd = &cobra.Command{
+		Use:   "run",
+		Short: "Start payment listener daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, _ := process.Ctx(cmd)
+			return run(ctx, runCfg)
+		},
+	}
+	runCfg storjscan.Config
+)
 
 func init() {
-	cfgstruct.Bind(pflag.CommandLine, &Flags)
+	defaults := cfgstruct.DefaultsFlag(rootCmd)
+	rootCmd.AddCommand(runCmd)
+	process.Bind(runCmd, &runCfg, defaults)
 }
 
 func main() {
-	pflag.Parse()
-
-	if err := run(context.Background(), Flags.Config); err != nil {
-		log.Fatal(err)
-	}
+	process.ExecCustomDebug(rootCmd)
 }
 
 func run(ctx context.Context, config storjscan.Config) error {
@@ -42,7 +53,7 @@ func run(ctx context.Context, config storjscan.Config) error {
 		}
 	}()
 
-	db, err := storjscandb.Open(ctx, logger.Named("storjscandb"), Flags.Database)
+	db, err := storjscandb.Open(ctx, logger.Named("storjscandb"), config.Database)
 	if err != nil {
 		return err
 	}
