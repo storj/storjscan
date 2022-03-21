@@ -1,5 +1,5 @@
 # storjscan
-`STORJ` token payments service.
+`STORJ` token payments service: `storjscan` scan manages wallet addresses and scans the blockchain for new STORJ token transfer transactions for the managed wallet addresses. It also calculates the USD amount of the transfers based on actual price.
 
 ## Build
 ```bash
