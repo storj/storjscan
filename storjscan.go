@@ -15,6 +15,7 @@ import (
 	"storj.io/private/debug"
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokens"
@@ -33,6 +34,8 @@ type Config struct {
 
 // DB is a collection of storjscan databases.
 type DB interface {
+	// Headers creates headers database methods.
+	Headers() blockchain.HeadersDB
 	// TokenPrice returns database for STORJ token price information.
 	TokenPrice() tokenprice.PriceQuoteDB
 	// Wallets returns database for deposit address information.
@@ -66,10 +69,6 @@ type App struct {
 		Listener net.Listener
 		Server   *api.Server
 	}
-
-	Wallets struct {
-		// TODO
-	}
 }
 
 // NewApp creates new storjscan application instance.
@@ -83,7 +82,7 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	}
 
 	{ // tokens
-		token, err := tokens.AddressFromHex(config.Tokens.TokenAddress)
+		token, err := blockchain.AddressFromHex(config.Tokens.Contract)
 		if err != nil {
 			return nil, err
 		}
@@ -126,9 +125,6 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			Run:   app.API.Server.Run,
 			Close: app.API.Server.Close,
 		})
-	}
-	{ // wallets
-		// TODO
 	}
 
 	return app, nil

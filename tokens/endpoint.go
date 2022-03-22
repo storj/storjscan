@@ -11,6 +11,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
+
+	"storj.io/storjscan/blockchain"
 )
 
 // ErrEndpoint - tokens endpoint error class.
@@ -45,7 +47,7 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 
 	addressHex := mux.Vars(r)["address"]
 
-	address, err := AddressFromHex(addressHex)
+	address, err := blockchain.AddressFromHex(addressHex)
 	if err != nil {
 		endpoint.serveJSONError(w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 		return

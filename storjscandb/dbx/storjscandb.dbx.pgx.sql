@@ -20,4 +20,3 @@ CREATE TABLE wallets (
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( address )
 );
-CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;

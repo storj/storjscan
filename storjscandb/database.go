@@ -14,6 +14,7 @@ import (
 	"storj.io/private/dbutil/pgutil"
 	"storj.io/private/migrate"
 	"storj.io/private/tagsql"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/wallets"
@@ -82,6 +83,11 @@ func (db *DB) MigrateToLatest(ctx context.Context) error {
 		return migrate.Create(ctx, "database", db.DB)
 	}
 	return migration.Run(ctx, db.log)
+}
+
+// Headers creates new headersDB with current DB connection.
+func (db *DB) Headers() blockchain.HeadersDB {
+	return &headersDB{db: db.DB}
 }
 
 // TokenPrice creates new PriceQuoteDB with current DB connection.

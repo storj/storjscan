@@ -335,8 +335,7 @@ CREATE TABLE wallets (
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( address )
-);
-CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;`
+);`
 }
 
 func (obj *pgxDB) wrapTx(tx tagsql.Tx) txMethods {
@@ -1309,53 +1308,6 @@ func (obj *pgxImpl) Get_BlockHeader_By_Number(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
-	block_header_timestamp_greater BlockHeader_Timestamp_Field) (
-	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
-
-	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.timestamp > ? LIMIT 1 OFFSET 0")
-
-	var __values []interface{}
-	__values = append(__values, block_header_timestamp_greater.value())
-
-	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
-	obj.logStmt(__stmt, __values...)
-
-	for {
-		block_header, err = func() (block_header *BlockHeader, err error) {
-			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
-			if err != nil {
-				return nil, err
-			}
-			defer __rows.Close()
-
-			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
-				return nil, nil
-			}
-
-			block_header = &BlockHeader{}
-			err = __rows.Scan(&block_header.Hash, &block_header.Number, &block_header.Timestamp, &block_header.CreatedAt)
-			if err != nil {
-				return nil, err
-			}
-
-			return block_header, nil
-		}()
-		if err != nil {
-			if obj.shouldRetry(err) {
-				continue
-			}
-			return nil, obj.makeErr(err)
-		}
-		return block_header, nil
-	}
-
-}
-
 func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
@@ -1878,16 +1830,6 @@ func (rx *Rx) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
 	return tx.Delete_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
 }
 
-func (rx *Rx) First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
-	block_header_timestamp_greater BlockHeader_Timestamp_Field) (
-	block_header *BlockHeader, err error) {
-	var tx *Tx
-	if tx, err = rx.getTx(ctx); err != nil {
-		return
-	}
-	return tx.First_BlockHeader_By_Timestamp_Greater(ctx, block_header_timestamp_greater)
-}
-
 func (rx *Rx) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
 	token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
@@ -2006,10 +1948,6 @@ type Methods interface {
 	Delete_TokenPrice_By_IntervalStart(ctx context.Context,
 		token_price_interval_start TokenPrice_IntervalStart_Field) (
 		deleted bool, err error)
-
-	First_BlockHeader_By_Timestamp_Greater(ctx context.Context,
-		block_header_timestamp_greater BlockHeader_Timestamp_Field) (
-		block_header *BlockHeader, err error)
 
 	First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
 		token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
