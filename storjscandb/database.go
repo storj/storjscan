@@ -16,6 +16,7 @@ import (
 	"storj.io/private/tagsql"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/tokenprice"
+	"storj.io/storjscan/wallets"
 )
 
 var (
@@ -88,6 +89,11 @@ func (db *DB) TokenPrice() tokenprice.PriceQuoteDB {
 	return &priceQuoteDB{db: db.DB}
 }
 
+// Wallets creates new WalletsDB with current DB connection.
+func (db *DB) Wallets() wallets.DB {
+	return &walletsDB{db: db.DB}
+}
+
 // PostgresMigration returns steps needed for migrating postgres database.
 func (db *DB) PostgresMigration() *migrate.Migration {
 	return &migrate.Migration{
@@ -117,6 +123,19 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 						interval_start timestamp with time zone NOT NULL,
 						price double precision NOT NULL,
 						PRIMARY KEY ( interval_start )
+					);`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Create wallets table",
+				Version:     2,
+				Action: migrate.SQL{
+					`CREATE TABLE wallets (
+						address text NOT NULL,
+						claimed timestamp with time zone,
+						created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
+						PRIMARY KEY ( address )
 					);`,
 				},
 			},

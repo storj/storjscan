@@ -18,6 +18,7 @@ import (
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokens"
+	"storj.io/storjscan/wallets"
 )
 
 var mon = monkit.Package()
@@ -32,8 +33,10 @@ type Config struct {
 
 // DB is a collection of storjscan databases.
 type DB interface {
-	// TokenPrice returns database for STORJ token price information
+	// TokenPrice returns database for STORJ token price information.
 	TokenPrice() tokenprice.PriceQuoteDB
+	// Wallets returns database for deposit address information.
+	Wallets() wallets.DB
 }
 
 // App is the storjscan process that runs API endpoint.
@@ -62,6 +65,10 @@ type App struct {
 	API struct {
 		Listener net.Listener
 		Server   *api.Server
+	}
+
+	Wallets struct {
+		// TODO
 	}
 }
 
@@ -119,6 +126,9 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			Run:   app.API.Server.Run,
 			Close: app.API.Server.Close,
 		})
+	}
+	{ // wallets
+		// TODO
 	}
 
 	return app, nil

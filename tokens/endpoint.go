@@ -15,7 +15,7 @@ import (
 // ErrEndpoint - tokens endpoint error class.
 var ErrEndpoint = errs.Class("tokens endpoint")
 
-// Endpoint for for querying ERC20 token information from ethereum chain.
+// Endpoint for querying ERC20 token information from ethereum chain.
 //
 // architecture: Endpoint
 type Endpoint struct {
