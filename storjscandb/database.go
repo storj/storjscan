@@ -117,41 +117,21 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 						created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 						PRIMARY KEY ( hash )
 					);
-					CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;`,
-				},
-			},
-			{
-				DB:          &db.migrationDB,
-				Description: "Create token price table",
-				Version:     1,
-				Action: migrate.SQL{
-					`CREATE TABLE token_prices (
+					CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;
+					CREATE TABLE token_prices (
 						interval_start timestamp with time zone NOT NULL,
 						price double precision NOT NULL,
 						PRIMARY KEY ( interval_start )
-					);`,
-				},
-			},
-			{
-				DB:          &db.migrationDB,
-				Description: "Create wallets table",
-				Version:     2,
-				Action: migrate.SQL{
-					`CREATE TABLE wallets (
+					);
+					CREATE TABLE wallets (
 						address text NOT NULL,
 						claimed timestamp with time zone,
+						satellite text,
+						info text,
 						created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 						PRIMARY KEY ( address )
-					);`,
-				},
-			},
-			{
-				DB:          &db.migrationDB,
-				Description: "Add fields APIKEY and INFO to wallets table",
-				Version:     3,
-				Action: migrate.SQL{
-					`ALTER TABLE wallets ADD COLUMN apikey bytea NOT NULL;`,
-					`ALTER TABLE wallets ADD COLUMN info text;`,
+					);
+					CREATE INDEX wallets_satellite_index ON wallets ( satellite );`,
 				},
 			},
 		},

@@ -61,7 +61,7 @@ func NewServer(log *zap.Logger, listener net.Listener, apiKeys map[string]string
 }
 
 func whoami(writer http.ResponseWriter, request *http.Request) {
-	id := getAPIIdentifier(request.Context())
+	id := GetAPIIdentifier(request.Context())
 	if id == "" {
 		// shouldn't be possible as all request are authenticated
 		writer.WriteHeader(http.StatusInternalServerError)
@@ -116,13 +116,13 @@ func (server *Server) authorize(next http.Handler) http.Handler {
 		id, secret, ok := r.BasicAuth()
 		if !ok {
 			w.Header().Add("www-Authenticate", "Basic realm=storjscan")
-			server.serveJSONError(w, http.StatusUnauthorized, Error.New("authentication is required"))
+			ServeJSONError(server.log, w, http.StatusUnauthorized, Error.New("authentication is required"))
 			return
 		}
 
 		identity, found := server.verifyAPIKey(id, secret)
 		if !found {
-			server.serveJSONError(w, http.StatusUnauthorized, Error.New("invalid api key provided"))
+			ServeJSONError(server.log, w, http.StatusUnauthorized, Error.New("invalid api key provided"))
 			return
 		}
 
@@ -131,8 +131,8 @@ func (server *Server) authorize(next http.Handler) http.Handler {
 	})
 }
 
-// getAPIIdentifier return the authenticated identity of the client.
-func getAPIIdentifier(ctx context.Context) string {
+// GetAPIIdentifier return the authenticated identity of the client.
+func GetAPIIdentifier(ctx context.Context) string {
 	value := ctx.Value(apiID)
 	if value == nil {
 		return ""
@@ -151,22 +151,6 @@ func (server *Server) verifyAPIKey(providedID string, providedSecret string) (ap
 	return apiID, found
 }
 
-// serveJSONError writes JSON error to response output stream.
-func (server *Server) serveJSONError(w http.ResponseWriter, status int, err error) {
-	w.WriteHeader(status)
-
-	var response struct {
-		Error string `json:"error"`
-	}
-	response.Error = err.Error()
-
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		server.log.Error("failed to write json error response", zap.Error(Error.Wrap(err)))
-		return
-	}
-}
-
 // Close closes server and underlying listener.
 func (server *Server) Close() error {
 	return Error.Wrap(server.http.Close())
@@ -183,4 +167,21 @@ func (server *Server) LogRoutes() error {
 		server.log.Info("Rest endpoint is registered", zap.String("path", template), zap.Error(err), zap.Strings("methods", methods))
 		return nil
 	})
+}
+
+// ServeJSONError writes JSON error to response output stream.
+func ServeJSONError(logger *zap.Logger, w http.ResponseWriter, status int, err error) {
+	w.WriteHeader(status)
+
+	var response struct {
+		Error string `json:"error"`
+	}
+
+	response.Error = err.Error()
+
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		logger.Error("failed to write json error response", zap.Error(err))
+		return
+	}
 }

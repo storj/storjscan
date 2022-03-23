@@ -18,9 +18,6 @@ import (
 )
 
 func TestChore(t *testing.T) {
-	ctx := testcontext.New(t)
-	defer ctx.Cleanup()
-
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		config := tokenprice.Config{
 			Interval:            time.Second * 5,

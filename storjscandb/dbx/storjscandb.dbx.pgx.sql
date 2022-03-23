@@ -15,8 +15,9 @@ CREATE TABLE token_prices (
 CREATE TABLE wallets (
 	address text NOT NULL,
 	claimed timestamp with time zone,
-	apikey bytea NOT NULL,
+	satellite text,
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( address )
 );
+CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;

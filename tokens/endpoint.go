@@ -12,6 +12,7 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
+	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 )
 
@@ -49,7 +50,7 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 
 	address, err := blockchain.AddressFromHex(addressHex)
 	if err != nil {
-		endpoint.serveJSONError(w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
+		api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 		return
 	}
 
@@ -57,37 +58,20 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 	if s := r.URL.Query().Get("from"); s != "" {
 		from, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			endpoint.serveJSONError(w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
+			api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 			return
 		}
 	}
 
 	payments, err := endpoint.service.Payments(ctx, address, from)
 	if err != nil {
-		endpoint.serveJSONError(w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
+		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
 		return
 	}
 
 	err = json.NewEncoder(w).Encode(payments)
 	if err != nil {
 		endpoint.log.Error("failed to write json payments response", zap.Error(ErrEndpoint.Wrap(err)))
-		return
-	}
-}
-
-// serveJSONError writes JSON error to response output stream.
-func (endpoint *Endpoint) serveJSONError(w http.ResponseWriter, status int, err error) {
-	w.WriteHeader(status)
-
-	var response struct {
-		Error string `json:"error"`
-	}
-
-	response.Error = err.Error()
-
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		endpoint.log.Error("failed to write json error response", zap.Error(ErrEndpoint.Wrap(err)))
 		return
 	}
 }

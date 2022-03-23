@@ -54,9 +54,11 @@ model wallet (
 
 	field address    text
 	field claimed    timestamp ( updatable, nullable )
-	field apikey     blob
+	field satellite  text      ( updatable, nullable )
 	field info       text      ( updatable, nullable )
 	field created_at timestamp ( autoinsert, default current_timestamp )
+
+	index ( fields satellite )
 )
 
 create wallet ( )
@@ -84,4 +86,9 @@ read count (
 read count (
 	select wallet
 	where wallet.claimed = null
+)
+
+read all (
+	select wallet
+	where wallet.satellite = ?
 )

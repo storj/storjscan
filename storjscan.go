@@ -74,6 +74,11 @@ type App struct {
 		Listener net.Listener
 		Server   *api.Server
 	}
+
+	Wallets struct {
+		Service  *wallets.Service
+		Endpoint *wallets.Endpoint
+	}
 }
 
 // NewApp creates new storjscan application instance.
@@ -136,6 +141,15 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			Run:   app.API.Server.Run,
 			Close: app.API.Server.Close,
 		})
+	}
+
+	{ // wallets
+		var err error
+		app.Wallets.Service, err = wallets.NewService(log.Named("wallets:service"), db.Wallets())
+		if err != nil {
+			return nil, err
+		}
+		app.Wallets.Endpoint = wallets.NewEndpoint(log.Named("wallets:endpoint"), app.Wallets.Service)
 	}
 
 	err := app.API.Server.LogRoutes()
