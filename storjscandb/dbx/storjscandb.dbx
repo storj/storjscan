@@ -65,6 +65,8 @@ model wallet (
 
 	field address text
 	field claimed timestamp (updatable, nullable)
+	field apikey blob
+	field info text (updatable, nullable) // can be used to store derivation path
 	field created_at timestamp ( autoinsert, default current_timestamp )
 )
 

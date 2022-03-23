@@ -331,6 +331,8 @@ CREATE TABLE token_prices (
 CREATE TABLE wallets (
 	address text NOT NULL,
 	claimed timestamp with time zone,
+	apikey bytea NOT NULL,
+	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( address )
 );
@@ -538,6 +540,8 @@ func (TokenPrice_Price_Field) _Column() string { return "price" }
 type Wallet struct {
 	Address   string
 	Claimed   *time.Time
+	Apikey    []byte
+	Info      *string
 	CreatedAt time.Time
 }
 
@@ -545,10 +549,12 @@ func (Wallet) _Table() string { return "wallets" }
 
 type Wallet_Create_Fields struct {
 	Claimed Wallet_Claimed_Field
+	Info    Wallet_Info_Field
 }
 
 type Wallet_Update_Fields struct {
 	Claimed Wallet_Claimed_Field
+	Info    Wallet_Info_Field
 }
 
 type Wallet_Address_Field struct {
@@ -601,6 +607,57 @@ func (f Wallet_Claimed_Field) value() interface{} {
 }
 
 func (Wallet_Claimed_Field) _Column() string { return "claimed" }
+
+type Wallet_Apikey_Field struct {
+	_set   bool
+	_null  bool
+	_value []byte
+}
+
+func Wallet_Apikey(v []byte) Wallet_Apikey_Field {
+	return Wallet_Apikey_Field{_set: true, _value: v}
+}
+
+func (f Wallet_Apikey_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (Wallet_Apikey_Field) _Column() string { return "apikey" }
+
+type Wallet_Info_Field struct {
+	_set   bool
+	_null  bool
+	_value *string
+}
+
+func Wallet_Info(v string) Wallet_Info_Field {
+	return Wallet_Info_Field{_set: true, _value: &v}
+}
+
+func Wallet_Info_Raw(v *string) Wallet_Info_Field {
+	if v == nil {
+		return Wallet_Info_Null()
+	}
+	return Wallet_Info(*v)
+}
+
+func Wallet_Info_Null() Wallet_Info_Field {
+	return Wallet_Info_Field{_set: true, _null: true}
+}
+
+func (f Wallet_Info_Field) isnull() bool { return !f._set || f._null || f._value == nil }
+
+func (f Wallet_Info_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (Wallet_Info_Field) _Column() string { return "info" }
 
 type Wallet_CreatedAt_Field struct {
 	_set   bool
@@ -1099,26 +1156,29 @@ func (obj *pgxImpl) Create_TokenPrice(ctx context.Context,
 
 func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_apikey Wallet_Apikey_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
+	__apikey_val := wallet_apikey.value()
+	__info_val := optional.Info.value()
 
-	var __columns = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("address, claimed")}
-	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?")}
+	var __columns = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("address, claimed, apikey, info")}
+	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?, ?, ?")}
 	var __clause = &__sqlbundle_Hole{SQL: __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("("), __columns, __sqlbundle_Literal(") VALUES ("), __placeholders, __sqlbundle_Literal(")")}}}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.address, wallets.claimed, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.address, wallets.claimed, wallets.apikey, wallets.info, wallets.created_at")}}
 
 	var __values []interface{}
-	__values = append(__values, __address_val, __claimed_val)
+	__values = append(__values, __address_val, __claimed_val, __apikey_val, __info_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Apikey, &wallet.Info, &wallet.CreatedAt)
 	if err != nil {
 		return nil, obj.makeErr(err)
 	}
@@ -1370,7 +1430,7 @@ func (obj *pgxImpl) Get_Wallet_By_Address(ctx context.Context,
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.created_at FROM wallets WHERE wallets.address = ?")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.apikey, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ?")
 
 	var __values []interface{}
 	__values = append(__values, wallet_address.value())
@@ -1379,7 +1439,7 @@ func (obj *pgxImpl) Get_Wallet_By_Address(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Apikey, &wallet.Info, &wallet.CreatedAt)
 	if err != nil {
 		return (*Wallet)(nil), obj.makeErr(err)
 	}
@@ -1391,7 +1451,7 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.created_at FROM wallets WHERE wallets.claimed is NULL LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.apikey, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
 
@@ -1414,7 +1474,7 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 			}
 
 			wallet = &Wallet{}
-			err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.CreatedAt)
+			err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.Apikey, &wallet.Info, &wallet.CreatedAt)
 			if err != nil {
 				return nil, err
 			}
@@ -1540,7 +1600,7 @@ func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 	defer mon.Task()(&ctx)(&err)
 	var __sets = &__sqlbundle_Hole{}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? RETURNING wallets.address, wallets.claimed, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? RETURNING wallets.address, wallets.claimed, wallets.apikey, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
 	var __values []interface{}
@@ -1549,6 +1609,11 @@ func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 	if update.Claimed._set {
 		__values = append(__values, update.Claimed.value())
 		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("claimed = ?"))
+	}
+
+	if update.Info._set {
+		__values = append(__values, update.Info.value())
+		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("info = ?"))
 	}
 
 	if len(__sets_sql.SQLs) == 0 {
@@ -1564,7 +1629,7 @@ func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Apikey, &wallet.Info, &wallet.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1782,13 +1847,14 @@ func (rx *Rx) Create_TokenPrice(ctx context.Context,
 
 func (rx *Rx) Create_Wallet(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_apikey Wallet_Apikey_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Create_Wallet(ctx, wallet_address, optional)
+	return tx.Create_Wallet(ctx, wallet_address, wallet_apikey, optional)
 
 }
 
@@ -1929,6 +1995,7 @@ type Methods interface {
 
 	Create_Wallet(ctx context.Context,
 		wallet_address Wallet_Address_Field,
+		wallet_apikey Wallet_Apikey_Field,
 		optional Wallet_Create_Fields) (
 		wallet *Wallet, err error)
 

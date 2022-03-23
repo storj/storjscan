@@ -139,6 +139,15 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					);`,
 				},
 			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Add fields APIKEY and INFO to wallets table",
+				Version:     3,
+				Action: migrate.SQL{
+					`ALTER TABLE wallets ADD COLUMN apikey bytea NOT NULL;`,
+					`ALTER TABLE wallets ADD COLUMN info text;`,
+				},
+			},
 		},
 	}
 }
