@@ -72,7 +72,10 @@ func (service *Service) Payments(ctx context.Context, address Address) (_ []Paym
 		payments = append(payments, Payment{
 			From:        iter.Event.From,
 			TokenValue:  iter.Event.Value,
+			BlockHash:   iter.Event.Raw.BlockHash,
+			BlockNumber: int64(iter.Event.Raw.BlockNumber),
 			Transaction: iter.Event.Raw.TxHash,
+			LogIndex:    int(iter.Event.Raw.Index),
 		})
 	}
 

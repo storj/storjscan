@@ -31,5 +31,8 @@ func AddressFromHex(hex string) (Address, error) {
 type Payment struct {
 	From        Address
 	TokenValue  *big.Int
+	BlockHash   Hash
+	BlockNumber int64
 	Transaction Hash
+	LogIndex    int
 }

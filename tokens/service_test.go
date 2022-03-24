@@ -43,9 +43,12 @@ func TestPayments(t *testing.T) {
 		require.NoError(t, err)
 
 		testPayments := []struct {
-			Amount int64
-			From   accounts.Account
-			Tx     common.Hash
+			Amount      int64
+			From        accounts.Account
+			BlockHash   common.Hash
+			BlockNumber int64
+			Tx          common.Hash
+			LogIndex    int
 		}{
 			{Amount: 10000, From: accs[0]},
 			{Amount: 10000, From: accs[1]},
@@ -62,9 +65,12 @@ func TestPayments(t *testing.T) {
 			tx, err = tk.Transfer(opts, accs[3].Address, big.NewInt(testPayment.Amount))
 			require.NoError(t, err)
 
-			_, err = network.WaitForTx(ctx, tx.Hash())
+			recpt, err := network.WaitForTx(ctx, tx.Hash())
 			require.NoError(t, err)
+			testPayments[i].BlockHash = recpt.BlockHash
+			testPayments[i].BlockNumber = recpt.BlockNumber.Int64()
 			testPayments[i].Tx = tx.Hash()
+			testPayments[i].LogIndex = 0
 		}
 
 		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress)

@@ -55,7 +55,7 @@ func TestEndpoint(t *testing.T) {
 		opts := network.TransactOptions(ctx, accounts[0], 1)
 		tx, err := tk.Transfer(opts, accounts[1].Address, big.NewInt(1000000))
 		require.NoError(t, err)
-		_, err = network.WaitForTx(ctx, tx.Hash())
+		recpt, err := network.WaitForTx(ctx, tx.Hash())
 		require.NoError(t, err)
 
 		url := fmt.Sprintf(
@@ -75,6 +75,9 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, accounts[0].Address, payments[0].From)
 		require.Equal(t, int64(1000000), payments[0].TokenValue.Int64())
+		require.Equal(t, recpt.BlockHash, payments[0].BlockHash)
+		require.Equal(t, recpt.BlockNumber.Int64(), payments[0].BlockNumber)
 		require.Equal(t, tx.Hash(), payments[0].Transaction)
+		require.Equal(t, 0, payments[0].LogIndex)
 	})
 }
