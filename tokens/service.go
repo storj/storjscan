@@ -21,8 +21,8 @@ var ErrService = errs.Class("tokens service")
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoint string
-	Contract string
+	Endpoint string `help:"Ethereum RPC endpoint" devDefault:"http://localhost:8545" releaseDefault:"/home/storj/.ethereum/geth.ipc"`
+	Contract string `help:"Address of the STORJ token to scan for transactions" default:"0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.

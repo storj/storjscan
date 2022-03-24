@@ -18,7 +18,7 @@ go test -race ./...
 ## Run
 Running `storjscan` configured to main net Ethereum node and `STORJ` token.
 ```bash
-./build/storjscan \
+./build/storjscan run \
 --database=postgres://postgres@localhost/storjscandb?sslmode=disable \
 --tokens.endpoint="https://mainnet.example-node.address" \
 --tokens.token-address=0xB64ef51C888972c908CFacf59B47C1AfBC0Ab8aC \
