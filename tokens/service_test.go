@@ -75,7 +75,7 @@ func TestPayments(t *testing.T) {
 
 		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress)
 
-		payments, err := service.Payments(ctx, accs[3].Address)
+		payments, err := service.Payments(ctx, accs[3].Address, 0)
 		require.NoError(t, err)
 
 		for i, payment := range payments {

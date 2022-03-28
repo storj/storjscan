@@ -41,8 +41,8 @@ func NewService(log *zap.Logger, endpoint string, token Address) *Service {
 	}
 }
 
-// Payments retrieves all ERC20 token payments for ethereum address.
-func (service *Service) Payments(ctx context.Context, address Address) (_ []Payment, err error) {
+// Payments retrieves all ERC20 token payments starting from particular block for ethereum address.
+func (service *Service) Payments(ctx context.Context, address Address, from int64) (_ []Payment, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
@@ -57,7 +57,7 @@ func (service *Service) Payments(ctx context.Context, address Address) (_ []Paym
 	}
 
 	opts := &bind.FilterOpts{
-		Start:   0,
+		Start:   uint64(from),
 		End:     nil,
 		Context: ctx,
 	}

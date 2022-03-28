@@ -63,7 +63,12 @@ func TestEndpoint(t *testing.T) {
 			lis.Addr().String(), accounts[1].Address.String())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
-		req.Header.Add("STORJSCAN_API_KEY", base64.URLEncoding.EncodeToString(apiKey.Bytes()))
+
+		// send the API key as an encoded string of the UUID bytes. server will decode and compare to UUID bytes
+		req.Header.Set("STORJSCAN_API_KEY", base64.URLEncoding.EncodeToString(apiKey.Bytes()))
+		val := req.URL.Query()
+		val.Add("from", "1")
+		req.URL.RawQuery = val.Encode()
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

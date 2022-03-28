@@ -6,6 +6,7 @@ package tokens
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/zeebo/errs"
@@ -36,7 +37,7 @@ func (endpoint *Endpoint) Register(router *mux.Router) {
 	router.HandleFunc("/payments/{address}", endpoint.Payments).Methods(http.MethodGet)
 }
 
-// Payments endpoint retrieves all ERC20 token payments for ethereum address.
+// Payments endpoint retrieves all ERC20 token payments starting from particular block for ethereum address.
 func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
@@ -50,7 +51,16 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payments, err := endpoint.service.Payments(ctx, address)
+	var from int64
+	if s := r.URL.Query().Get("from"); s != "" {
+		from, err = strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			endpoint.serveJSONError(w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
+			return
+		}
+	}
+
+	payments, err := endpoint.service.Payments(ctx, address, from)
 	if err != nil {
 		endpoint.serveJSONError(w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
 		return
