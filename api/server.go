@@ -6,7 +6,6 @@ package api
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net"
@@ -26,7 +25,7 @@ var Error = errs.Class("api server")
 // Config holds API endpoint configuration.
 type Config struct {
 	Address string   `help:"public address to listen on" default:":10000"`
-	Keys    []string `help:"List of secrets to connect to service endpoints."`
+	Keys    []string `help:"List of user:secret pairs to connect to service endpoints."`
 }
 
 // Server represents storjscan API web server.
@@ -34,34 +33,57 @@ type Config struct {
 // architecture: Endpoint
 type Server struct {
 	log      *zap.Logger
-	apiKeys  [][]byte
+	apiKeys  map[string]string
 	listener net.Listener
 	router   *mux.Router
 	http     http.Server
 }
 
 // NewServer creates new API server instance.
-func NewServer(log *zap.Logger, listener net.Listener, apiKeys [][]byte) *Server {
+func NewServer(log *zap.Logger, listener net.Listener, apiKeys map[string]string) *Server {
 	router := mux.NewRouter()
-	router.Name("api").PathPrefix("/api/v0")
+	apiRouter := router.Name("api").PathPrefix("/api/v0").Subrouter()
 
-	return &Server{
+	server := &Server{
 		log:      log,
 		apiKeys:  apiKeys,
 		listener: listener,
-		router:   router,
+		router:   apiRouter,
 		http: http.Server{
 			Handler: router,
 		},
+	}
+	server.NewAPI("/auth", func(router *mux.Router) {
+		router.HandleFunc("/whoami", whoami)
+	})
+
+	return server
+}
+
+func whoami(writer http.ResponseWriter, request *http.Request) {
+	id := getAPIIdentifier(request.Context())
+	if id == "" {
+		// shouldn't be possible as all request are authenticated
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	response := struct {
+		ID string
+	}{
+		ID: id,
+	}
+	err := json.NewEncoder(writer).Encode(response)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }
 
 // NewAPI creates new API route and register endpoint methods.
 func (server *Server) NewAPI(path string, register func(*mux.Router)) {
-	apiRouter := server.router.GetRoute("api").Subrouter()
-	router := apiRouter.PathPrefix(path).Subrouter()
+	router := server.router.PathPrefix(path).Subrouter()
 	router.StrictSlash(true)
-	apiRouter.Use(server.authorize)
+	router.Use(server.authorize)
 	register(router)
 }
 
@@ -86,31 +108,47 @@ func (server *Server) Run(ctx context.Context) (err error) {
 	return Error.Wrap(group.Wait())
 }
 
+var apiID struct{}
+
 // authorize validates request authorization using the provided api key found in the request header.
 func (server *Server) authorize(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiKey, err := base64.URLEncoding.DecodeString(r.Header.Get("STORJSCAN_API_KEY"))
-		if err != nil {
-			server.serveJSONError(w, http.StatusUnauthorized, Error.Wrap(err))
+		id, secret, ok := r.BasicAuth()
+		if !ok {
+			w.Header().Add("www-Authenticate", "Basic realm=storjscan")
+			server.serveJSONError(w, http.StatusUnauthorized, Error.New("authentication is required"))
 			return
 		}
-		if !server.verifyAPIKey(apiKey) {
+
+		identity, found := server.verifyAPIKey(id, secret)
+		if !found {
 			server.serveJSONError(w, http.StatusUnauthorized, Error.New("invalid api key provided"))
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), apiID, identity)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
+// getAPIIdentifier return the authenticated identity of the client.
+func getAPIIdentifier(ctx context.Context) string {
+	value := ctx.Value(apiID)
+	if value == nil {
+		return ""
+	}
+	return value.(string)
+}
+
 // verifyAPIKey determines if the api key provided is valid.
-func (server *Server) verifyAPIKey(apiKey []byte) bool {
-	for _, validKey := range server.apiKeys {
-		if subtle.ConstantTimeCompare(apiKey, validKey) == 1 {
-			return true
+func (server *Server) verifyAPIKey(providedID string, providedSecret string) (apiID string, found bool) {
+	for id, secret := range server.apiKeys {
+		if subtle.ConstantTimeCompare([]byte(providedID), []byte(id))+subtle.ConstantTimeCompare([]byte(providedSecret), []byte(secret)) == 2 {
+			apiID = id
+			found = true
 		}
 	}
-	return false
+	return apiID, found
 }
 
 // serveJSONError writes JSON error to response output stream.
@@ -132,4 +170,17 @@ func (server *Server) serveJSONError(w http.ResponseWriter, status int, err erro
 // Close closes server and underlying listener.
 func (server *Server) Close() error {
 	return Error.Wrap(server.http.Close())
+}
+
+// LogRoutes print out registered routes to the log.
+func (server *Server) LogRoutes() error {
+	return server.router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		template, err := route.GetPathTemplate()
+		if err != nil {
+			return err
+		}
+		methods, _ := route.GetMethods()
+		server.log.Info("Rest endpoint is registered", zap.String("path", template), zap.Error(err), zap.Strings("methods", methods))
+		return nil
+	})
 }

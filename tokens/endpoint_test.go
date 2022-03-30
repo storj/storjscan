@@ -4,7 +4,6 @@
 package tokens_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -13,11 +12,11 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
-	"storj.io/common/uuid"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
@@ -34,10 +33,7 @@ func TestEndpoint(t *testing.T) {
 		service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress)
 		endpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
 
-		apiKey, err := uuid.New()
-		require.NoError(t, err)
-
-		apiServer := api.NewServer(logger, lis, [][]byte{apiKey.Bytes()})
+		apiServer := api.NewServer(logger, lis, map[string]string{"eu1": "eu1secret"})
 		apiServer.NewAPI("/example", endpoint.Register)
 		ctx.Go(func() error {
 			return apiServer.Run(ctx)
@@ -64,13 +60,17 @@ func TestEndpoint(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		require.NoError(t, err)
 
-		// send the API key as an encoded string of the UUID bytes. server will decode and compare to UUID bytes
-		req.Header.Set("STORJSCAN_API_KEY", base64.URLEncoding.EncodeToString(apiKey.Bytes()))
+		// without authentication we should get access denied
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+		req.SetBasicAuth("eu1", "eu1secret")
 		val := req.URL.Query()
 		val.Add("from", "1")
 		req.URL.RawQuery = val.Encode()
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer ctx.Check(func() error { return resp.Body.Close() })
 		require.Equal(t, http.StatusOK, resp.StatusCode)

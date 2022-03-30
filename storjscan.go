@@ -5,10 +5,11 @@ package storjscan
 
 import (
 	"context"
-	"encoding/base64"
 	"net"
+	"strings"
 
 	"github.com/spacemonkeygo/monkit/v3"
+	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -127,6 +128,10 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		})
 	}
 
+	err := app.API.Server.LogRoutes()
+	if err != nil {
+		return app, err
+	}
 	return app, nil
 }
 
@@ -146,14 +151,14 @@ func (app *App) Close() error {
 	return app.Servers.Close()
 }
 
-func getKeyBytes(keys []string) ([][]byte, error) {
-	apiKeys := make([][]byte, 0, len(keys))
+func getKeyBytes(keys []string) (map[string]string, error) {
+	apiKeys := make(map[string]string)
 	for _, key := range keys {
-		apiKey, err := base64.URLEncoding.DecodeString(key)
-		if err != nil {
-			return nil, err
+		parts := strings.SplitN(key, ":", 2)
+		if len(parts) != 2 {
+			return apiKeys, errs.New("Api keys should be defined in user:secret form, but it was %s", key)
 		}
-		apiKeys = append(apiKeys, apiKey)
+		apiKeys[parts[0]] = parts[1]
 	}
 	return apiKeys, nil
 }

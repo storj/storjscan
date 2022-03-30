@@ -17,28 +17,45 @@ go test -race ./...
 
 ## Run
 Running `storjscan` configured to main net Ethereum node and `STORJ` token.
+
 ```bash
 ./build/storjscan run \
 --database=postgres://postgres@localhost/storjscandb?sslmode=disable \
 --tokens.endpoint="https://mainnet.example-node.address" \
 --tokens.token-address=0xB64ef51C888972c908CFacf59B47C1AfBC0Ab8aC \
 --api.address="127.0.0.1:10000" \
---api.keys="gJFzBF7EQEK7RxATlvNiOg==" 
+--api.keys="eu1:eu1secret" 
 ```
 
 ### Payments
 Get payments of random Ethereum address `0x69A0a76DaB9CE2bB2BDb3ba129eEd79606b4C2C6`
+
 ```bash
-curl -X GET -H "STORJSCAN_API_KEY: gJFzBF7EQEK7RxATlvNiOg==" \
+curl -X GET -u "eu1:eu1secret" \
+http://127.0.0.1:10000/api/v0/auth/whoami
+```
+
+Output
+```json
+
+```
+
+
+```bash
+curl -X GET -u "eu1:eu1secret" \
 http://127.0.0.1:10000/api/v0/tokens/payments/0x69A0a76DaB9CE2bB2BDb3ba129eEd79606b4C2C6
 ```
+
 Output
 ```json
 [
   {
-    "From":"0xdfd5293d8e347dfe59e90efd55b2956a1343963d",
-    "TokenValue":45246900000,
-    "Transaction":"0x451b6ef600db4f059d2b792b524c7de5eee837631266f8cdc53997098723f438"
+    "From": "0xdfd5293d8e347dfe59e90efd55b2956a1343963d",
+    "TokenValue": 45246900000,
+    "BlockHash": "0xdd782ac418835fe5f80ec3c32fd4ee595286bbc14c36f5f4f2b12c83df38d89a",
+    "BlockNumber": 13361611,
+    "Transaction": "0x451b6ef600db4f059d2b792b524c7de5eee837631266f8cdc53997098723f438",
+    "LogIndex": 43
   }
 ]
 ```
