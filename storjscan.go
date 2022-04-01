@@ -57,6 +57,10 @@ type App struct {
 		Server   *debug.Server
 	}
 
+	Blockchain struct {
+		HeadersCache *blockchain.HeadersCache
+	}
+
 	Tokens struct {
 		Service  *tokens.Service
 		Endpoint *tokens.Endpoint
@@ -82,6 +86,11 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		Services: lifecycle.NewGroup(log.Named("services")),
 	}
 
+	{ // blockchain
+		app.Blockchain.HeadersCache = blockchain.NewHeadersCache(log.Named("blockchain:headers-cache"),
+			db.Headers())
+	}
+
 	{ // tokens
 		token, err := blockchain.AddressFromHex(config.Tokens.Contract)
 		if err != nil {
@@ -90,7 +99,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			config.Tokens.Endpoint,
-			token)
+			token,
+			app.Blockchain.HeadersCache)
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}

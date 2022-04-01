@@ -13,14 +13,29 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
+	"storj.io/private/dbutil/pgtest"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
+	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokens"
 )
 
 func TestPayments(t *testing.T) {
 	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
+
+		connStr := pgtest.PickPostgres(t)
+		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Check(db.Close)
+
+		err = db.MigrateToLatest(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		client := network.Dial()
 		defer client.Close()
@@ -73,7 +88,8 @@ func TestPayments(t *testing.T) {
 			testPayments[i].LogIndex = 0
 		}
 
-		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress)
+		cache := blockchain.NewHeadersCache(logger, db.Headers())
+		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache)
 
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
 		require.NoError(t, err)

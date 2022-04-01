@@ -5,15 +5,21 @@ package blockchain_test
 
 import (
 	"crypto/rand"
+	"math/big"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
+	"storj.io/common/testrand"
+	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 )
 
@@ -112,5 +118,66 @@ func TestHeadersDBList(t *testing.T) {
 			require.Equal(t, header.Number, list[i].Number)
 			require.Equal(t, header.Timestamp, list[i].Timestamp)
 		}
+	})
+}
+
+func TestHeadersCache(t *testing.T) {
+	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
+		logger := zaptest.NewLogger(t)
+		now := time.Now().Round(time.Microsecond).UTC()
+
+		var hash blockchain.Hash
+		b := testrand.BytesInt(32)
+		copy(hash[:], b)
+
+		err := db.Headers().Insert(ctx, hash, 1, now)
+		require.NoError(t, err)
+
+		cache := blockchain.NewHeadersCache(logger, db.Headers())
+		header, err := cache.Get(ctx, &ethclient.Client{}, hash)
+		require.NoError(t, err)
+		require.Equal(t, hash, header.Hash)
+		require.EqualValues(t, 1, header.Number)
+		require.Equal(t, now, header.Timestamp)
+	})
+}
+
+func TestHeadersCacheMissingHeader(t *testing.T) {
+	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+		logger := zaptest.NewLogger(t)
+
+		connStr := pgtest.PickPostgres(t)
+		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Check(db.Close)
+
+		err = db.MigrateToLatest(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		client := network.Dial()
+		defer client.Close()
+
+		fullHeader, err := client.HeaderByNumber(ctx, new(big.Int).SetInt64(1))
+		require.NoError(t, err)
+		hash := fullHeader.Hash()
+		headerTime := time.Unix(int64(fullHeader.Time), 0).UTC()
+
+		cache := blockchain.NewHeadersCache(logger, db.Headers())
+		header, err := cache.Get(ctx, client, hash)
+		require.NoError(t, err)
+		require.Equal(t, hash, header.Hash)
+		require.EqualValues(t, 1, header.Number)
+		require.Equal(t, headerTime, header.Timestamp)
+
+		// check that header was written to db
+		header, err = db.Headers().Get(ctx, hash)
+		require.NoError(t, err)
+		require.Equal(t, hash, header.Hash)
+		require.EqualValues(t, 1, header.Number)
+		require.Equal(t, headerTime, header.Timestamp)
 	})
 }

@@ -32,14 +32,16 @@ type Service struct {
 	log      *zap.Logger
 	endpoint string
 	token    blockchain.Address
+	headers  *blockchain.HeadersCache
 }
 
 // NewService creates new token service instance.
-func NewService(log *zap.Logger, endpoint string, token blockchain.Address) *Service {
+func NewService(log *zap.Logger, endpoint string, token blockchain.Address, cache *blockchain.HeadersCache) *Service {
 	return &Service{
 		log:      log,
 		endpoint: endpoint,
 		token:    token,
+		headers:  cache,
 	}
 }
 
@@ -71,6 +73,11 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 
 	var payments []Payment
 	for iter.Next() {
+		header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
+		if err != nil {
+			return nil, ErrService.Wrap(err)
+		}
+
 		payments = append(payments, Payment{
 			From:        iter.Event.From,
 			TokenValue:  iter.Event.Value,
@@ -78,6 +85,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 			BlockNumber: int64(iter.Event.Raw.BlockNumber),
 			Transaction: iter.Event.Raw.TxHash,
 			LogIndex:    int(iter.Event.Raw.Index),
+			Timestamp:   header.Timestamp,
 		})
 	}
 

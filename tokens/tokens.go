@@ -5,6 +5,7 @@ package tokens
 
 import (
 	"math/big"
+	"time"
 
 	"github.com/spacemonkeygo/monkit/v3"
 
@@ -21,4 +22,5 @@ type Payment struct {
 	BlockNumber int64
 	Transaction blockchain.Hash
 	LogIndex    int
+	Timestamp   time.Time
 }

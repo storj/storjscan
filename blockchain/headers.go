@@ -7,7 +7,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
+	"go.uber.org/zap"
 )
 
 var (
@@ -37,4 +39,46 @@ type HeadersDB interface {
 	GetByNumber(ctx context.Context, number int64) (Header, error)
 	// List retrieves all headers stored in cache db.
 	List(ctx context.Context) ([]Header, error)
+}
+
+// HeadersCache cache for blockchain block headers.
+type HeadersCache struct {
+	log *zap.Logger
+	db  HeadersDB
+}
+
+// NewHeadersCache creates new headers cache.
+func NewHeadersCache(log *zap.Logger, db HeadersDB) *HeadersCache {
+	return &HeadersCache{
+		log: log,
+		db:  db,
+	}
+}
+
+// Get retrieves block header from cache storage or fetches header from client and caches it.
+// TODO: remove direct dependency on go-eth client from public API.
+func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, hash Hash) (Header, error) {
+	header, err := headersCache.db.Get(ctx, hash)
+	switch {
+	case err == nil:
+		return header, nil
+	case errs.Is(err, ErrNoHeader):
+		ethHeader, err := client.HeaderByHash(ctx, hash)
+		if err != nil {
+			return Header{}, err
+		}
+
+		header := Header{
+			Hash:      ethHeader.Hash(),
+			Number:    ethHeader.Number.Int64(),
+			Timestamp: time.Unix(int64(ethHeader.Time), 0).UTC(),
+		}
+		if err = headersCache.db.Insert(ctx, header.Hash, header.Number, header.Timestamp); err != nil {
+			return Header{}, err
+		}
+
+		return header, nil
+	default:
+		return Header{}, err
+	}
 }
