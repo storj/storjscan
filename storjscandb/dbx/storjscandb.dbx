@@ -32,8 +32,10 @@ model token_price (
 	field price          float64   ( updatable )
 )
 
-create token_price ( )
-update token_price ( where token_price.interval_start = ? )
+create token_price (
+	noreturn
+	replace
+)
 delete token_price ( where token_price.interval_start = ? )
 
 read one (

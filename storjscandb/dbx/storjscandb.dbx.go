@@ -1128,15 +1128,15 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) Create_TokenPrice(ctx context.Context,
+func (obj *pgxImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
 	token_price_price TokenPrice_Price_Field) (
-	token_price *TokenPrice, err error) {
+	err error) {
 	defer mon.Task()(&ctx)(&err)
 	__interval_start_val := token_price_interval_start.value()
 	__price_val := token_price_price.value()
 
-	var __embed_stmt = __sqlbundle_Literal("INSERT INTO token_prices ( interval_start, price ) VALUES ( ?, ? ) RETURNING token_prices.interval_start, token_prices.price")
+	var __embed_stmt = __sqlbundle_Literal("INSERT INTO token_prices ( interval_start, price ) VALUES ( ?, ? ) ON CONFLICT ( interval_start ) DO UPDATE SET interval_start = EXCLUDED.interval_start, price = EXCLUDED.price")
 
 	var __values []interface{}
 	__values = append(__values, __interval_start_val, __price_val)
@@ -1144,12 +1144,11 @@ func (obj *pgxImpl) Create_TokenPrice(ctx context.Context,
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
-	token_price = &TokenPrice{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&token_price.IntervalStart, &token_price.Price)
+	_, err = obj.driver.ExecContext(ctx, __stmt, __values...)
 	if err != nil {
-		return nil, obj.makeErr(err)
+		return obj.makeErr(err)
 	}
-	return token_price, nil
+	return nil
 
 }
 
@@ -1504,47 +1503,6 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 
 }
 
-func (obj *pgxImpl) Update_TokenPrice_By_IntervalStart(ctx context.Context,
-	token_price_interval_start TokenPrice_IntervalStart_Field,
-	update TokenPrice_Update_Fields) (
-	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
-	var __sets = &__sqlbundle_Hole{}
-
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE token_prices SET "), __sets, __sqlbundle_Literal(" WHERE token_prices.interval_start = ? RETURNING token_prices.interval_start, token_prices.price")}}
-
-	__sets_sql := __sqlbundle_Literals{Join: ", "}
-	var __values []interface{}
-	var __args []interface{}
-
-	if update.Price._set {
-		__values = append(__values, update.Price.value())
-		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("price = ?"))
-	}
-
-	if len(__sets_sql.SQLs) == 0 {
-		return nil, emptyUpdate()
-	}
-
-	__args = append(__args, token_price_interval_start.value())
-
-	__values = append(__values, __args...)
-	__sets.SQL = __sets_sql
-
-	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
-	obj.logStmt(__stmt, __values...)
-
-	token_price = &TokenPrice{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&token_price.IntervalStart, &token_price.Price)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, obj.makeErr(err)
-	}
-	return token_price, nil
-}
-
 func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 	wallet_address Wallet_Address_Field,
 	update Wallet_Update_Fields) (
@@ -1785,18 +1743,6 @@ func (rx *Rx) Create_BlockHeader(ctx context.Context,
 
 }
 
-func (rx *Rx) Create_TokenPrice(ctx context.Context,
-	token_price_interval_start TokenPrice_IntervalStart_Field,
-	token_price_price TokenPrice_Price_Field) (
-	token_price *TokenPrice, err error) {
-	var tx *Tx
-	if tx, err = rx.getTx(ctx); err != nil {
-		return
-	}
-	return tx.Create_TokenPrice(ctx, token_price_interval_start, token_price_price)
-
-}
-
 func (rx *Rx) Create_Wallet(ctx context.Context,
 	wallet_address Wallet_Address_Field,
 	wallet_apikey Wallet_Apikey_Field,
@@ -1889,15 +1835,16 @@ func (rx *Rx) Get_Wallet_By_Address(ctx context.Context,
 	return tx.Get_Wallet_By_Address(ctx, wallet_address)
 }
 
-func (rx *Rx) Update_TokenPrice_By_IntervalStart(ctx context.Context,
+func (rx *Rx) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
-	update TokenPrice_Update_Fields) (
-	token_price *TokenPrice, err error) {
+	token_price_price TokenPrice_Price_Field) (
+	err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Update_TokenPrice_By_IntervalStart(ctx, token_price_interval_start, update)
+	return tx.ReplaceNoReturn_TokenPrice(ctx, token_price_interval_start, token_price_price)
+
 }
 
 func (rx *Rx) Update_Wallet_By_Address(ctx context.Context,
@@ -1929,11 +1876,6 @@ type Methods interface {
 		block_header_number BlockHeader_Number_Field,
 		block_header_timestamp BlockHeader_Timestamp_Field) (
 		block_header *BlockHeader, err error)
-
-	Create_TokenPrice(ctx context.Context,
-		token_price_interval_start TokenPrice_IntervalStart_Field,
-		token_price_price TokenPrice_Price_Field) (
-		token_price *TokenPrice, err error)
 
 	Create_Wallet(ctx context.Context,
 		wallet_address Wallet_Address_Field,
@@ -1972,10 +1914,10 @@ type Methods interface {
 		wallet_address Wallet_Address_Field) (
 		wallet *Wallet, err error)
 
-	Update_TokenPrice_By_IntervalStart(ctx context.Context,
+	ReplaceNoReturn_TokenPrice(ctx context.Context,
 		token_price_interval_start TokenPrice_IntervalStart_Field,
-		update TokenPrice_Update_Fields) (
-		token_price *TokenPrice, err error)
+		token_price_price TokenPrice_Price_Field) (
+		err error)
 
 	Update_Wallet_By_Address(ctx context.Context,
 		wallet_address Wallet_Address_Field,

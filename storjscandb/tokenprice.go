@@ -29,21 +29,13 @@ type priceQuoteDB struct {
 // Update updates the stored token price for the given time window, or creates a new entry if it does not exist.
 func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, price float64) (err error) {
 	defer mon.Task()(&ctx)(&err)
-	err = priceQuoteDB.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
-		updated, err := priceQuoteDB.db.Update_TokenPrice_By_IntervalStart(ctx, dbx.TokenPrice_IntervalStart(window),
-			dbx.TokenPrice_Update_Fields{Price: dbx.TokenPrice_Price(price)})
-
-		if updated == nil {
-			_, err = priceQuoteDB.db.Create_TokenPrice(ctx, dbx.TokenPrice_IntervalStart(window), dbx.TokenPrice_Price(price))
-			return ErrPriceQuoteDB.Wrap(err)
-		}
-		return err
-	})
+	err = priceQuoteDB.db.ReplaceNoReturn_TokenPrice(ctx, dbx.TokenPrice_IntervalStart(window), dbx.TokenPrice_Price(price))
 	return ErrPriceQuoteDB.Wrap(err)
 }
 
 // GetFirst gets the first token price with timestamp greater than provided window.
-func (priceQuoteDB *priceQuoteDB) GetFirst(ctx context.Context, window time.Time) (tokenprice.PriceQuote, error) {
+func (priceQuoteDB *priceQuoteDB) GetFirst(ctx context.Context, window time.Time) (pq tokenprice.PriceQuote, err error) {
+	defer mon.Task()(&ctx)(&err)
 	rows, err := priceQuoteDB.db.First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx,
 		dbx.TokenPrice_IntervalStart(window))
 	if err != nil {
