@@ -4,8 +4,9 @@
 *.dll
 *.so
 *.dylib
-
 .build
+
+cmd/storjscan/storjscan
 
 # Test binary, built with `go test -c`
 *.test
