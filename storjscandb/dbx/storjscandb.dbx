@@ -52,7 +52,7 @@ read first (
 model wallet (
 	key address
 
-	field address    text
+	field address    blob
 	field claimed    timestamp ( updatable, nullable )
 	field satellite  text      ( updatable, nullable )
 	field info       text      ( updatable, nullable )

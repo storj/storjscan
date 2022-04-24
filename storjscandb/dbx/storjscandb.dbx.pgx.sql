@@ -13,7 +13,7 @@ CREATE TABLE token_prices (
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
-	address text NOT NULL,
+	address bytea NOT NULL,
 	claimed timestamp with time zone,
 	satellite text,
 	info text,

@@ -33,15 +33,11 @@ func (wdb *walletsDB) Insert(ctx context.Context, address blockchain.Address, in
 	if info != "" {
 		optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
 	}
-	w, err := wdb.db.Create_Wallet(ctx, dbx.Wallet_Address(address.Hex()), optional)
+	w, err := wdb.db.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), optional)
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
-	a, err := blockchain.AddressFromHex(w.Address)
-	if err != nil {
-		return nil, ErrWalletsDB.Wrap(err)
-	}
-	return &wallets.Wallet{Address: a}, nil
+	return &wallets.Wallet{Address: blockchain.AddressFromBytes(w.Address)}, nil
 }
 
 // InsertBatch adds a new db entry for each address. Entries is a string map of address:info. Info can be an empty string.
@@ -53,7 +49,7 @@ func (wdb *walletsDB) InsertBatch(ctx context.Context, entries map[blockchain.Ad
 			if info != "" {
 				optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
 			}
-			_, err := tx.Create_Wallet(ctx, dbx.Wallet_Address(address.Hex()), optional)
+			_, err = tx.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), optional)
 			if err != nil {
 				return err
 			}
@@ -92,12 +88,8 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
-	a, err := blockchain.AddressFromHex(dbxw.Address)
-	if err != nil {
-		return nil, ErrWalletsDB.Wrap(err)
-	}
 	return &wallets.Wallet{
-		Address:   a,
+		Address:   blockchain.AddressFromBytes(dbxw.Address),
 		Claimed:   *dbxw.Claimed,
 		Satellite: *dbxw.Satellite,
 		Info:      *dbxw.Info,
@@ -107,7 +99,7 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 
 // Get queries the wallets table for the information stored for a given address.
 func (wdb *walletsDB) Get(ctx context.Context, address blockchain.Address) (*wallets.Wallet, error) {
-	w, err := wdb.db.Get_Wallet_By_Address(ctx, dbx.Wallet_Address(address.Hex()))
+	w, err := wdb.db.Get_Wallet_By_Address(ctx, dbx.Wallet_Address(address.Bytes()))
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
@@ -150,11 +142,7 @@ func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (ma
 		return accounts, ErrWalletsDB.Wrap(err)
 	}
 	for _, r := range rows {
-		a, err := blockchain.AddressFromHex(r.Address)
-		if err != nil {
-			return accounts, ErrWalletsDB.Wrap(err)
-		}
-		accounts[a] = *r.Info
+		accounts[blockchain.AddressFromBytes(r.Address)] = *r.Info
 	}
 	return accounts, nil
 }

@@ -329,7 +329,7 @@ CREATE TABLE token_prices (
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
-	address text NOT NULL,
+	address bytea NOT NULL,
 	claimed timestamp with time zone,
 	satellite text,
 	info text,
@@ -538,7 +538,7 @@ func (f TokenPrice_Price_Field) value() interface{} {
 func (TokenPrice_Price_Field) _Column() string { return "price" }
 
 type Wallet struct {
-	Address   string
+	Address   []byte
 	Claimed   *time.Time
 	Satellite *string
 	Info      *string
@@ -562,10 +562,10 @@ type Wallet_Update_Fields struct {
 type Wallet_Address_Field struct {
 	_set   bool
 	_null  bool
-	_value string
+	_value []byte
 }
 
-func Wallet_Address(v string) Wallet_Address_Field {
+func Wallet_Address(v []byte) Wallet_Address_Field {
 	return Wallet_Address_Field{_set: true, _value: v}
 }
 

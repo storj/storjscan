@@ -19,6 +19,11 @@ func AddressFromHex(hex string) (Address, error) {
 	return common.HexToAddress(hex), nil
 }
 
+// AddressFromBytes creates a new address from hex bytes.
+func AddressFromBytes(byteAddr []byte) Address {
+	return common.BytesToAddress(byteAddr)
+}
+
 // Hash represent cryptographic hash.
 type Hash = common.Hash
 
