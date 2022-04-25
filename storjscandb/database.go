@@ -126,7 +126,7 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					CREATE TABLE wallets (
 						address bytea NOT NULL,
 						claimed timestamp with time zone,
-						satellite text,
+						satellite text NOT NULL,
 						info text,
 						created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 						PRIMARY KEY ( address )

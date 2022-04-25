@@ -28,12 +28,12 @@ type walletsDB struct {
 }
 
 // Insert adds a new entry in the wallets table. Info can be an empty string.
-func (wdb *walletsDB) Insert(ctx context.Context, address blockchain.Address, info string) (*wallets.Wallet, error) {
+func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address blockchain.Address, info string) (*wallets.Wallet, error) {
 	var optional dbx.Wallet_Create_Fields
 	if info != "" {
 		optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
 	}
-	w, err := wdb.db.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), optional)
+	w, err := wdb.db.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite), optional)
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
@@ -45,7 +45,7 @@ func (wdb *walletsDB) Insert(ctx context.Context, address blockchain.Address, in
 }
 
 // InsertBatch adds a new db entry for each address. Entries is a string map of address:info. Info can be an empty string.
-func (wdb *walletsDB) InsertBatch(ctx context.Context, entries map[blockchain.Address]string) error {
+func (wdb *walletsDB) InsertBatch(ctx context.Context, satellite string, entries map[blockchain.Address]string) error {
 	err := wdb.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
 		var err error
 		var optional dbx.Wallet_Create_Fields
@@ -53,7 +53,7 @@ func (wdb *walletsDB) InsertBatch(ctx context.Context, entries map[blockchain.Ad
 			if info != "" {
 				optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
 			}
-			_, err = tx.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), optional)
+			_, err := tx.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite), optional)
 			if err != nil {
 				return err
 			}
@@ -67,18 +67,18 @@ func (wdb *walletsDB) InsertBatch(ctx context.Context, entries map[blockchain.Ad
 func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wallet, error) {
 	var dbxw *dbx.Wallet
 	err := wdb.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
-		w1, err := tx.First_Wallet_By_Claimed_Is_Null(ctx)
+		w1, err := tx.First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx, dbx.Wallet_Satellite(satellite))
 		if err != nil {
 			return err
 		}
 		if w1 == nil {
 			return wallets.ErrNoAvailableWallets
 		}
-		w2, err := tx.Update_Wallet_By_Address(ctx,
+		w2, err := tx.Update_Wallet_By_Address_And_Satellite(ctx,
 			dbx.Wallet_Address(w1.Address),
+			dbx.Wallet_Satellite(satellite),
 			dbx.Wallet_Update_Fields{
-				Claimed:   dbx.Wallet_Claimed(time.Now()),
-				Satellite: dbx.Wallet_Satellite(satellite),
+				Claimed: dbx.Wallet_Claimed(time.Now()),
 			})
 		if err != nil {
 			return err
@@ -99,22 +99,22 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 	return &wallets.Wallet{
 		Address:   addr,
 		Claimed:   *dbxw.Claimed,
-		Satellite: *dbxw.Satellite,
+		Satellite: dbxw.Satellite,
 		Info:      *dbxw.Info,
 		CreatedAt: dbxw.CreatedAt,
 	}, nil
 }
 
 // Get queries the wallets table for the information stored for a given address.
-func (wdb *walletsDB) Get(ctx context.Context, address blockchain.Address) (*wallets.Wallet, error) {
-	w, err := wdb.db.Get_Wallet_By_Address(ctx, dbx.Wallet_Address(address.Bytes()))
+func (wdb *walletsDB) Get(ctx context.Context, satellite string, address blockchain.Address) (*wallets.Wallet, error) {
+	w, err := wdb.db.Get_Wallet_By_Address_And_Satellite(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite))
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
 	return &wallets.Wallet{
 		Address:   address,
 		Claimed:   *w.Claimed,
-		Satellite: *w.Satellite,
+		Satellite: w.Satellite,
 		Info:      *w.Info,
 		CreatedAt: w.CreatedAt,
 	}, nil
@@ -145,7 +145,7 @@ func (wdb *walletsDB) GetStats(ctx context.Context) (stats *wallets.Stats, err e
 // ListBySatellite returns addresses claimed by a certain satellite.
 func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (map[blockchain.Address]string, error) {
 	var accounts = make(map[blockchain.Address]string)
-	rows, err := wdb.db.All_Wallet_By_Satellite(ctx, dbx.Wallet_Satellite(satellite))
+	rows, err := wdb.db.All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx, dbx.Wallet_Satellite(satellite))
 	if err != nil {
 		return accounts, ErrWalletsDB.Wrap(err)
 	}

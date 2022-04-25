@@ -52,10 +52,10 @@ func (service *Service) Claim(ctx context.Context, satellite string) (_ blockcha
 }
 
 // Get returns information related to an address.
-func (service *Service) Get(ctx context.Context, address blockchain.Address) (*Wallet, error) {
+func (service *Service) Get(ctx context.Context, satellite string, address blockchain.Address) (*Wallet, error) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
-	a, err := service.db.Get(ctx, address)
+	a, err := service.db.Get(ctx, satellite, address)
 	if err != nil {
 		return nil, ErrWalletsService.Wrap(err)
 	}
@@ -79,9 +79,9 @@ func (service *Service) ListBySatellite(ctx context.Context, satellite string) (
 }
 
 // Register inserts the addresses (key) and any associated info (value) to the persistent storage.
-func (service *Service) Register(ctx context.Context, addresses map[blockchain.Address]string) error {
+func (service *Service) Register(ctx context.Context, satellite string, addresses map[blockchain.Address]string) error {
 	var err error
 	defer mon.Task()(&ctx)(&err)
-	err = service.db.InsertBatch(ctx, addresses)
+	err = service.db.InsertBatch(ctx, satellite, addresses)
 	return ErrWalletsService.Wrap(err)
 }

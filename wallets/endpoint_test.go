@@ -30,7 +30,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		endpoint := wallets.NewEndpoint(logger.Named("endpoint"), service)
 
-		apiServer := api.NewServer(logger, lis, map[string]string{"eu1": "eu1secret"})
+		apiServer := api.NewServer(logger, lis, map[string]string{"test-satellite": "secret"})
 		apiServer.NewAPI("/example", endpoint.Register)
 		ctx.Go(func() error {
 			return apiServer.Run(ctx)
@@ -49,7 +49,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-		req.SetBasicAuth("eu1", "eu1secret")
+		req.SetBasicAuth("test-satellite", "secret")
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer ctx.Check(func() error { return resp.Body.Close() })
@@ -60,7 +60,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, returnAddr)
 
-		addresses, err := service.ListBySatellite(ctx, "eu1")
+		addresses, err := service.ListBySatellite(ctx, "test-satellite")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(addresses))
 
@@ -68,7 +68,7 @@ func TestEndpoint(t *testing.T) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/example/wallets/claim", lis.Addr().String()), nil)
 		require.NoError(t, err)
 
-		req.SetBasicAuth("eu1", "eu1secret")
+		req.SetBasicAuth("test-satellite", "secret")
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer ctx.Check(func() error { return resp.Body.Close() })

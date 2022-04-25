@@ -331,7 +331,7 @@ CREATE TABLE token_prices (
 CREATE TABLE wallets (
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
-	satellite text,
+	satellite text NOT NULL,
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( address )
@@ -540,7 +540,7 @@ func (TokenPrice_Price_Field) _Column() string { return "price" }
 type Wallet struct {
 	Address   []byte
 	Claimed   *time.Time
-	Satellite *string
+	Satellite string
 	Info      *string
 	CreatedAt time.Time
 }
@@ -548,15 +548,13 @@ type Wallet struct {
 func (Wallet) _Table() string { return "wallets" }
 
 type Wallet_Create_Fields struct {
-	Claimed   Wallet_Claimed_Field
-	Satellite Wallet_Satellite_Field
-	Info      Wallet_Info_Field
+	Claimed Wallet_Claimed_Field
+	Info    Wallet_Info_Field
 }
 
 type Wallet_Update_Fields struct {
-	Claimed   Wallet_Claimed_Field
-	Satellite Wallet_Satellite_Field
-	Info      Wallet_Info_Field
+	Claimed Wallet_Claimed_Field
+	Info    Wallet_Info_Field
 }
 
 type Wallet_Address_Field struct {
@@ -613,25 +611,12 @@ func (Wallet_Claimed_Field) _Column() string { return "claimed" }
 type Wallet_Satellite_Field struct {
 	_set   bool
 	_null  bool
-	_value *string
+	_value string
 }
 
 func Wallet_Satellite(v string) Wallet_Satellite_Field {
-	return Wallet_Satellite_Field{_set: true, _value: &v}
+	return Wallet_Satellite_Field{_set: true, _value: v}
 }
-
-func Wallet_Satellite_Raw(v *string) Wallet_Satellite_Field {
-	if v == nil {
-		return Wallet_Satellite_Null()
-	}
-	return Wallet_Satellite(*v)
-}
-
-func Wallet_Satellite_Null() Wallet_Satellite_Field {
-	return Wallet_Satellite_Field{_set: true, _null: true}
-}
-
-func (f Wallet_Satellite_Field) isnull() bool { return !f._set || f._null || f._value == nil }
 
 func (f Wallet_Satellite_Field) value() interface{} {
 	if !f._set || f._null {
@@ -1170,12 +1155,13 @@ func (obj *pgxImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 
 func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
-	__satellite_val := optional.Satellite.value()
+	__satellite_val := wallet_satellite.value()
 	__info_val := optional.Info.value()
 
 	var __columns = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("address, claimed, satellite, info")}
@@ -1391,15 +1377,16 @@ func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_Interv
 
 }
 
-func (obj *pgxImpl) Get_Wallet_By_Address(ctx context.Context,
-	wallet_address Wallet_Address_Field) (
+func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
+	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ?")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ?")
 
 	var __values []interface{}
-	__values = append(__values, wallet_address.value())
+	__values = append(__values, wallet_address.value(), wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1413,13 +1400,15 @@ func (obj *pgxImpl) Get_Wallet_By_Address(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
+	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
+	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1518,20 +1507,15 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 
 }
 
-func (obj *pgxImpl) All_Wallet_By_Satellite(ctx context.Context,
+func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __cond_0 = &__sqlbundle_Condition{Left: "wallets.satellite", Equal: true, Right: "?", Null: true}
-
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE "), __cond_0}}
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
 	var __values []interface{}
-	if !wallet_satellite.isnull() {
-		__cond_0.Null = false
-		__values = append(__values, wallet_satellite.value())
-	}
+	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1568,14 +1552,15 @@ func (obj *pgxImpl) All_Wallet_By_Satellite(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
+func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 	var __sets = &__sqlbundle_Hole{}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? AND wallets.satellite = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
 	var __values []interface{}
@@ -1584,11 +1569,6 @@ func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 	if update.Claimed._set {
 		__values = append(__values, update.Claimed.value())
 		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("claimed = ?"))
-	}
-
-	if update.Satellite._set {
-		__values = append(__values, update.Satellite.value())
-		__sets_sql.SQLs = append(__sets_sql.SQLs, __sqlbundle_Literal("satellite = ?"))
 	}
 
 	if update.Info._set {
@@ -1600,7 +1580,7 @@ func (obj *pgxImpl) Update_Wallet_By_Address(ctx context.Context,
 		return nil, emptyUpdate()
 	}
 
-	__args = append(__args, wallet_address.value())
+	__args = append(__args, wallet_address.value(), wallet_satellite.value())
 
 	__values = append(__values, __args...)
 	__sets.SQL = __sets_sql
@@ -1773,14 +1753,14 @@ func (rx *Rx) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	return tx.All_BlockHeader_OrderBy_Desc_Timestamp(ctx)
 }
 
-func (rx *Rx) All_Wallet_By_Satellite(ctx context.Context,
+func (rx *Rx) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.All_Wallet_By_Satellite(ctx, wallet_satellite)
+	return tx.All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx, wallet_satellite)
 }
 
 func (rx *Rx) Count_Wallet_Address(ctx context.Context) (
@@ -1825,13 +1805,14 @@ func (rx *Rx) Create_BlockHeader(ctx context.Context,
 
 func (rx *Rx) Create_Wallet(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Create_Wallet(ctx, wallet_address, optional)
+	return tx.Create_Wallet(ctx, wallet_address, wallet_satellite, optional)
 
 }
 
@@ -1865,13 +1846,14 @@ func (rx *Rx) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStar
 	return tx.First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx, token_price_interval_start_greater)
 }
 
-func (rx *Rx) First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+func (rx *Rx) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
+	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.First_Wallet_By_Claimed_Is_Null(ctx)
+	return tx.First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx, wallet_satellite)
 }
 
 func (rx *Rx) Get_BlockHeader_By_Hash(ctx context.Context,
@@ -1904,14 +1886,15 @@ func (rx *Rx) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	return tx.Get_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
 }
 
-func (rx *Rx) Get_Wallet_By_Address(ctx context.Context,
-	wallet_address Wallet_Address_Field) (
+func (rx *Rx) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
+	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Get_Wallet_By_Address(ctx, wallet_address)
+	return tx.Get_Wallet_By_Address_And_Satellite(ctx, wallet_address, wallet_satellite)
 }
 
 func (rx *Rx) ReplaceNoReturn_TokenPrice(ctx context.Context,
@@ -1926,22 +1909,23 @@ func (rx *Rx) ReplaceNoReturn_TokenPrice(ctx context.Context,
 
 }
 
-func (rx *Rx) Update_Wallet_By_Address(ctx context.Context,
+func (rx *Rx) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet_address Wallet_Address_Field,
+	wallet_satellite Wallet_Satellite_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Update_Wallet_By_Address(ctx, wallet_address, update)
+	return tx.Update_Wallet_By_Address_And_Satellite(ctx, wallet_address, wallet_satellite, update)
 }
 
 type Methods interface {
 	All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 		rows []*BlockHeader, err error)
 
-	All_Wallet_By_Satellite(ctx context.Context,
+	All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 		wallet_satellite Wallet_Satellite_Field) (
 		rows []*Wallet, err error)
 
@@ -1962,6 +1946,7 @@ type Methods interface {
 
 	Create_Wallet(ctx context.Context,
 		wallet_address Wallet_Address_Field,
+		wallet_satellite Wallet_Satellite_Field,
 		optional Wallet_Create_Fields) (
 		wallet *Wallet, err error)
 
@@ -1977,7 +1962,8 @@ type Methods interface {
 		token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
 		token_price *TokenPrice, err error)
 
-	First_Wallet_By_Claimed_Is_Null(ctx context.Context) (
+	First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
+		wallet_satellite Wallet_Satellite_Field) (
 		wallet *Wallet, err error)
 
 	Get_BlockHeader_By_Hash(ctx context.Context,
@@ -1992,8 +1978,9 @@ type Methods interface {
 		token_price_interval_start TokenPrice_IntervalStart_Field) (
 		token_price *TokenPrice, err error)
 
-	Get_Wallet_By_Address(ctx context.Context,
-		wallet_address Wallet_Address_Field) (
+	Get_Wallet_By_Address_And_Satellite(ctx context.Context,
+		wallet_address Wallet_Address_Field,
+		wallet_satellite Wallet_Satellite_Field) (
 		wallet *Wallet, err error)
 
 	ReplaceNoReturn_TokenPrice(ctx context.Context,
@@ -2001,8 +1988,9 @@ type Methods interface {
 		token_price_price TokenPrice_Price_Field) (
 		err error)
 
-	Update_Wallet_By_Address(ctx context.Context,
+	Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 		wallet_address Wallet_Address_Field,
+		wallet_satellite Wallet_Satellite_Field,
 		update Wallet_Update_Fields) (
 		wallet *Wallet, err error)
 }

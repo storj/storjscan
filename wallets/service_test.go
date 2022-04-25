@@ -29,7 +29,7 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 
 		// test methods before any addresses are in the db
-		wallet, err := service.Get(ctx, blockchain.Address{})
+		wallet, err := service.Get(ctx, "eu1", blockchain.Address{})
 		require.Error(t, err)
 		require.Nil(t, wallet)
 
@@ -58,7 +58,7 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, "", addr)
 
-		wallet, err = service.Get(ctx, addr)
+		wallet, err = service.Get(ctx, "test-satellite", addr)
 		require.NoError(t, err)
 		require.NotNil(t, wallet.Address)
 		require.NotNil(t, wallet.Claimed)
@@ -86,7 +86,7 @@ func TestService(t *testing.T) {
 
 		random, err := blockchain.AddressFromHex("0xc1912fee45d61c87cc5ea59dae31190fffff232d")
 		require.NoError(t, err)
-		wallet, err = service.Get(ctx, random)
+		wallet, err = service.Get(ctx, "eu1", random)
 		require.Error(t, err)
 		require.Nil(t, wallet)
 
@@ -130,6 +130,6 @@ func generateTestAddresses(ctx context.Context, service *wallets.Service, count 
 		return errors.New("no addresses created")
 	}
 
-	err = service.Register(ctx, entries)
+	err = service.Register(ctx, "test-satellite", entries)
 	return err
 }
