@@ -105,7 +105,9 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			config.Tokens.Endpoint,
 			token,
-			app.Blockchain.HeadersCache)
+			app.Blockchain.HeadersCache,
+			db.Wallets(),
+			100)
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}

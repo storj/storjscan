@@ -38,9 +38,10 @@ func NewEndpoint(log *zap.Logger, service *Service) *Endpoint {
 // Register registers endpoint methods on API server subroute.
 func (endpoint *Endpoint) Register(router *mux.Router) {
 	router.HandleFunc("/payments/{address}", endpoint.Payments).Methods(http.MethodGet)
+	router.HandleFunc("/payments", endpoint.AllPayments).Methods(http.MethodGet)
 }
 
-// Payments endpoint retrieves all ERC20 token payments starting from particular block for ethereum address.
+// Payments endpoint retrieves all ERC20 token payments of one specific wallet, starting from particular block for ethereum address.
 func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
@@ -65,6 +66,36 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 
 	payments, err := endpoint.service.Payments(ctx, address, from)
 	if err != nil {
+		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(payments)
+	if err != nil {
+		endpoint.log.Error("failed to write json payments response", zap.Error(ErrEndpoint.Wrap(err)))
+		return
+	}
+}
+
+// AllPayments endpoint retrieves all ERC20 token payments claimed by one satellite starting from particular block for ethereum address.
+func (endpoint *Endpoint) AllPayments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var err error
+	defer mon.Task()(&ctx)(&err)
+
+	var from int64
+	if s := r.URL.Query().Get("from"); s != "" {
+		from, err = strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
+			return
+		}
+	}
+
+	// We request logs of 100 addresses in one batch. We can make it configurable if required later.
+	payments, err := endpoint.service.AllPayments(ctx, api.GetAPIIdentifier(ctx), from)
+	if err != nil {
+
 		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
 		return
 	}

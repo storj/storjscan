@@ -156,7 +156,12 @@ func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (ma
 			errList = errs.Combine(errList, ErrWalletsDB.Wrap(err))
 			continue
 		}
-		accounts[addr] = *r.Info
+
+		info := ""
+		if r.Info != nil {
+			info = *r.Info
+		}
+		accounts[addr] = info
 	}
 	return accounts, errList
 }

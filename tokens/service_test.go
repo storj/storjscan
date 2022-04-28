@@ -6,6 +6,7 @@ package tokens_test
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -14,9 +15,11 @@ import (
 
 	"storj.io/common/testcontext"
 	"storj.io/private/dbutil/pgtest"
+	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
+	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokens"
 )
@@ -89,7 +92,7 @@ func TestPayments(t *testing.T) {
 		}
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache)
+		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, nil, 100)
 
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
 		require.NoError(t, err)
@@ -101,4 +104,129 @@ func TestPayments(t *testing.T) {
 			require.Equal(t, testPayment.Tx, payment.Transaction)
 		}
 	})
+}
+
+func TestAllPayments(t *testing.T) {
+	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+		storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
+			logger := zaptest.NewLogger(t)
+
+			client := network.Dial()
+			defer client.Close()
+
+			tk, err := testtoken.NewTestToken(tokenAddress, client)
+			require.NoError(t, err)
+
+			accs := network.Accounts()
+
+			// transfer 1000000 a0 -> [a1..a3]
+			for i := 1; i < 4; i++ {
+				opts := network.TransactOptions(ctx, accs[0], int64(i))
+				tx, err := tk.Transfer(opts, accs[i].Address, big.NewInt(1000000))
+				require.NoError(t, err)
+				_, err = network.WaitForTx(ctx, tx.Hash())
+				require.NoError(t, err)
+			}
+
+			// create pool of addresses from [a4..a9] and claim them:
+			for i := 4; i < 10; i++ {
+				var optional dbx.Wallet_Create_Fields
+
+				// 4,5,6 are unclaimed
+				if i > 6 {
+					optional.Claimed = dbx.Wallet_Claimed(time.Now())
+				}
+				apiKey := "eu1"
+				if i == 7 {
+					apiKey = "us1"
+				}
+				_, err = db.Create_Wallet(ctx,
+					dbx.Wallet_Address(accs[i].Address.Bytes()),
+					dbx.Wallet_Satellite(apiKey),
+					optional)
+				require.NoError(t, err)
+
+			}
+
+			// do actual transfers (from acc[1..3] --> a[7..9])
+			testPayments := []struct {
+				Amount      int64
+				From        accounts.Account
+				To          accounts.Account
+				BlockHash   common.Hash
+				BlockNumber int64
+				Tx          common.Hash
+				LogIndex    int
+			}{
+				{Amount: 10000, From: accs[1], To: accs[7]},
+				{Amount: 10000, From: accs[2], To: accs[8]},
+				{Amount: 10000, From: accs[3], To: accs[9]},
+				{Amount: 1000, From: accs[3], To: accs[7]},
+				{Amount: 2000, From: accs[3], To: accs[8]},
+				{Amount: 3000, From: accs[2], To: accs[9]},
+
+				// sending to unclaimed address
+				{Amount: 3000, From: accs[2], To: accs[6]},
+			}
+			for i, testPayment := range testPayments {
+				nonce, err := client.PendingNonceAt(ctx, testPayment.From.Address)
+				require.NoError(t, err)
+
+				opts := network.TransactOptions(ctx, testPayment.From, int64(nonce))
+				tx, err := tk.Transfer(opts, testPayment.To.Address, big.NewInt(testPayment.Amount))
+				require.NoError(t, err)
+
+				recpt, err := network.WaitForTx(ctx, tx.Hash())
+				require.NoError(t, err)
+				testPayments[i].BlockHash = recpt.BlockHash
+				testPayments[i].BlockNumber = recpt.BlockNumber.Int64()
+				testPayments[i].Tx = tx.Hash()
+				testPayments[i].LogIndex = 0
+			}
+
+			cache := blockchain.NewHeadersCache(logger, db.Headers())
+			service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), 2)
+
+			t.Run("eu1 from block 0", func(t *testing.T) {
+				payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", 1)
+				require.NoError(t, err)
+
+				// 4 transactions out of 6
+				require.Equal(t, 4, len(payments))
+
+				txEqual(t, testPayments[1], payments[0])
+				txEqual(t, testPayments[2], payments[1])
+				txEqual(t, testPayments[4], payments[2])
+				txEqual(t, testPayments[5], payments[3])
+
+			})
+			t.Run("eu1 with specified block", func(t *testing.T) {
+				payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", testPayments[4].BlockNumber)
+				require.NoError(t, err)
+
+				// 2 transactions out of 6
+				require.Equal(t, 2, len(payments))
+
+				txEqual(t, testPayments[4], payments[0])
+				txEqual(t, testPayments[5], payments[1])
+
+			})
+
+		})
+	})
+}
+
+func txEqual(t *testing.T, s struct {
+	Amount      int64
+	From        accounts.Account
+	To          accounts.Account
+	BlockHash   common.Hash
+	BlockNumber int64
+	Tx          common.Hash
+	LogIndex    int
+}, payment tokens.Payment) {
+	require.Equal(t, s.From.Address, payment.From)
+	require.Equal(t, s.To.Address, payment.To)
+	require.Equal(t, s.Amount, payment.TokenValue.Int64())
+	require.Equal(t, s.Tx, payment.Transaction)
 }

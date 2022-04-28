@@ -41,6 +41,6 @@ type DB interface {
 	Get(ctx context.Context, satellite string, address blockchain.Address) (*Wallet, error)
 	// GetStats returns information about the wallets table.
 	GetStats(ctx context.Context) (*Stats, error)
-	// ListBySatellite returns accounts claimed by a certain satellite.
+	// ListBySatellite returns accounts claimed by a certain satellite (address -> info).
 	ListBySatellite(ctx context.Context, satellite string) (map[blockchain.Address]string, error)
 }

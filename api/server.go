@@ -126,9 +126,13 @@ func (server *Server) authorize(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), apiID, identity)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(SetAPIIdentifier(r.Context(), identity)))
 	})
+}
+
+// SetAPIIdentifier sets the satellite identifier to the context.
+func SetAPIIdentifier(ctx context.Context, identity string) context.Context {
+	return context.WithValue(ctx, apiID, identity)
 }
 
 // GetAPIIdentifier return the authenticated identity of the client.
