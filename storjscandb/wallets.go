@@ -37,7 +37,11 @@ func (wdb *walletsDB) Insert(ctx context.Context, address blockchain.Address, in
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
-	return &wallets.Wallet{Address: blockchain.AddressFromBytes(w.Address)}, nil
+	addr, err := blockchain.AddressFromBytes(w.Address)
+	if err != nil {
+		return nil, ErrWalletsDB.Wrap(err)
+	}
+	return &wallets.Wallet{Address: addr}, nil
 }
 
 // InsertBatch adds a new db entry for each address. Entries is a string map of address:info. Info can be an empty string.
@@ -88,8 +92,12 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
+	addr, err := blockchain.AddressFromBytes(dbxw.Address)
+	if err != nil {
+		return nil, ErrWalletsDB.Wrap(err)
+	}
 	return &wallets.Wallet{
-		Address:   blockchain.AddressFromBytes(dbxw.Address),
+		Address:   addr,
 		Claimed:   *dbxw.Claimed,
 		Satellite: *dbxw.Satellite,
 		Info:      *dbxw.Info,
@@ -141,8 +149,14 @@ func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (ma
 	if err != nil {
 		return accounts, ErrWalletsDB.Wrap(err)
 	}
+	var errList error
 	for _, r := range rows {
-		accounts[blockchain.AddressFromBytes(r.Address)] = *r.Info
+		addr, err := blockchain.AddressFromBytes(r.Address)
+		if err != nil {
+			errList = errs.Combine(errList, ErrWalletsDB.Wrap(err))
+			continue
+		}
+		accounts[addr] = *r.Info
 	}
-	return accounts, nil
+	return accounts, errList
 }
