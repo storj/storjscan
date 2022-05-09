@@ -23,3 +23,5 @@ build
 
 # IDEs local directories
 .idea
+
+.mnemonic

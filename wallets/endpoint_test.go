@@ -31,7 +31,7 @@ func TestEndpoint(t *testing.T) {
 		endpoint := wallets.NewEndpoint(logger.Named("endpoint"), service)
 
 		apiServer := api.NewServer(logger, lis, map[string]string{"test-satellite": "secret"})
-		apiServer.NewAPI("/example", endpoint.Register)
+		apiServer.NewAPI("/wallets", endpoint.Register)
 		ctx.Go(func() error {
 			return apiServer.Run(ctx)
 		})
@@ -41,7 +41,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		// happy path
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/example/wallets/claim", lis.Addr().String()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/wallets/claim", lis.Addr().String()), nil)
 		require.NoError(t, err)
 
 		// we should get access denied without authentication
@@ -65,7 +65,7 @@ func TestEndpoint(t *testing.T) {
 		require.Equal(t, 1, len(addresses))
 
 		// unexpected path (no more addresses available)
-		req, err = http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/example/wallets/claim", lis.Addr().String()), nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/wallets/claim", lis.Addr().String()), nil)
 		require.NoError(t, err)
 
 		req.SetBasicAuth("test-satellite", "secret")

@@ -123,6 +123,15 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		})
 	}
 
+	{ // wallets
+		var err error
+		app.Wallets.Service, err = wallets.NewService(log.Named("wallets:service"), db.Wallets())
+		if err != nil {
+			return nil, err
+		}
+		app.Wallets.Endpoint = wallets.NewEndpoint(log.Named("wallets:endpoint"), app.Wallets.Service)
+	}
+
 	{ // API
 		var err error
 
@@ -137,21 +146,13 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		}
 		app.API.Server = api.NewServer(log.Named("api:server"), app.API.Listener, apiKeys)
 		app.API.Server.NewAPI("/tokens", app.Tokens.Endpoint.Register)
+		app.API.Server.NewAPI("/wallets", app.Wallets.Endpoint.Register)
 
 		app.Servers.Add(lifecycle.Item{
 			Name:  "api",
 			Run:   app.API.Server.Run,
 			Close: app.API.Server.Close,
 		})
-	}
-
-	{ // wallets
-		var err error
-		app.Wallets.Service, err = wallets.NewService(log.Named("wallets:service"), db.Wallets())
-		if err != nil {
-			return nil, err
-		}
-		app.Wallets.Endpoint = wallets.NewEndpoint(log.Named("wallets:endpoint"), app.Wallets.Service)
 	}
 
 	err := app.API.Server.LogRoutes()

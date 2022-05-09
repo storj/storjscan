@@ -5,9 +5,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 
+	mm "github.com/miguelmota/go-ethereum-hdwallet"
 	"github.com/spf13/cobra"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
@@ -16,6 +20,7 @@ import (
 	"storj.io/private/process"
 	"storj.io/storjscan"
 	"storj.io/storjscan/storjscandb"
+	"storj.io/storjscan/wallets"
 )
 
 var (
@@ -23,6 +28,8 @@ var (
 		Use:   "storjscan",
 		Short: "STORJ token payment management service",
 	}
+
+	runCfg runConfig
 	runCmd = &cobra.Command{
 		Use:   "run",
 		Short: "Start payment listener daemon",
@@ -31,6 +38,7 @@ var (
 			return run(ctx, runCfg)
 		},
 	}
+
 	setupCmd = &cobra.Command{
 		Use:   "migrate",
 		Short: "Run database migration",
@@ -39,7 +47,35 @@ var (
 			return migrate(ctx, runCfg)
 		},
 	}
-	runCfg runConfig
+
+	generateCfg wallets.GenerateConfig
+	generateCmd = &cobra.Command{
+		Use:   "generate",
+		Short: "Generated deterministic wallet addresses and register them to the db",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, _ := process.Ctx(cmd)
+
+			mnemonic, err := ioutil.ReadFile(generateCfg.MnemonicFile)
+			if err != nil {
+				return errs.New("Couldn't read mnemonic from %s: %v", generateCfg.MnemonicFile, err)
+			}
+
+			return wallets.Generate(ctx, generateCfg, strings.TrimSpace(string(mnemonic)))
+		},
+	}
+
+	mnemonicCmd = &cobra.Command{
+		Use:   "mnemonic",
+		Short: "Print out a random mnemonic to be used.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			m, err := mm.NewMnemonic(256)
+			if err != nil {
+				return errs.Wrap(err)
+			}
+			fmt.Println(m)
+			return nil
+		},
+	}
 )
 
 // migrate executes the database migration on an existing database.
@@ -76,6 +112,12 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(setupCmd)
 	process.Bind(runCmd, &runCfg, defaults)
+
+	rootCmd.AddCommand(generateCmd)
+	process.Bind(generateCmd, &generateCfg, defaults)
+
+	rootCmd.AddCommand(mnemonicCmd)
+
 }
 
 func main() {

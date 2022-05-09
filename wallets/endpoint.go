@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/storjscan/api"
+	"storj.io/storjscan/blockchain"
 )
 
 // ErrEndpoint is the wallets endpoint error class.
@@ -35,7 +36,8 @@ func NewEndpoint(log *zap.Logger, service *Service) *Endpoint {
 
 // Register registers endpoint methods on API server subroute.
 func (endpoint *Endpoint) Register(router *mux.Router) {
-	router.HandleFunc("/wallets/claim", endpoint.Claim).Methods(http.MethodPost)
+	router.HandleFunc("/claim", endpoint.Claim).Methods(http.MethodPost)
+	router.HandleFunc("/", endpoint.AddWallets).Methods(http.MethodPost)
 }
 
 // Claim returns an available deposit address.
@@ -47,10 +49,8 @@ func (endpoint *Endpoint) Claim(w http.ResponseWriter, r *http.Request) {
 	satellite := api.GetAPIIdentifier(ctx)
 	address, err := endpoint.service.Claim(ctx, satellite)
 
-	if err != nil && errs.Is(err, ErrNoAvailableWallets) {
+	if err != nil {
 		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
-	} else if err != nil {
-		api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 		return
 	}
 
@@ -59,4 +59,30 @@ func (endpoint *Endpoint) Claim(w http.ResponseWriter, r *http.Request) {
 		endpoint.log.Error("failed to write json wallets response", zap.Error(ErrEndpoint.Wrap(err)))
 		return
 	}
+}
+
+// AddWallets saves newly generated wallets.
+func (endpoint *Endpoint) AddWallets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var err error
+	defer mon.Task()(&ctx)(&err)
+
+	var addresses map[blockchain.Address]string
+
+	err = json.NewDecoder(r.Body).Decode(&addresses)
+	if err != nil {
+		api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
+		return
+	}
+
+	satellite := api.GetAPIIdentifier(ctx)
+
+	err = endpoint.service.Register(ctx, satellite, addresses)
+
+	if err != nil {
+		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

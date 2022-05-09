@@ -29,31 +29,20 @@ type walletsDB struct {
 
 // Insert adds a new entry in the wallets table. Info can be an empty string.
 func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address blockchain.Address, info string) (*wallets.Wallet, error) {
-	var optional dbx.Wallet_Create_Fields
-	if info != "" {
-		optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
-	}
-	w, err := wdb.db.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite), optional)
+	_, err := wdb.db.Exec(ctx, wdb.db.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
 	if err != nil {
-		return nil, ErrWalletsDB.Wrap(err)
+		return nil, err
 	}
-	addr, err := blockchain.AddressFromBytes(w.Address)
-	if err != nil {
-		return nil, ErrWalletsDB.Wrap(err)
-	}
-	return &wallets.Wallet{Address: addr}, nil
+	return &wallets.Wallet{Address: address, Satellite: satellite, Info: info}, nil
 }
 
 // InsertBatch adds a new db entry for each address. Entries is a string map of address:info. Info can be an empty string.
 func (wdb *walletsDB) InsertBatch(ctx context.Context, satellite string, entries map[blockchain.Address]string) error {
 	err := wdb.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
 		var err error
-		var optional dbx.Wallet_Create_Fields
+
 		for address, info := range entries {
-			if info != "" {
-				optional = dbx.Wallet_Create_Fields{Info: dbx.Wallet_Info(info)}
-			}
-			_, err := tx.Create_Wallet(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite), optional)
+			_, err := tx.Tx.Exec(ctx, tx.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
 			if err != nil {
 				return err
 			}
