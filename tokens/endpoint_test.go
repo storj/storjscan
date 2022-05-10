@@ -160,13 +160,21 @@ func TestEndpoint(t *testing.T) {
 				defer ctx.Check(func() error { return resp.Body.Close() })
 				require.Equal(t, http.StatusOK, resp.StatusCode)
 
-				var payments []tokens.Payment
+				currentHead, err := client.HeaderByNumber(ctx, nil)
+				require.NoError(t, err)
+				latestBlockHeader := blockchain.Header{
+					Hash:      currentHead.Hash(),
+					Number:    currentHead.Number.Int64(),
+					Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
+				}
+
+				var payments tokens.LatestPayments
 				err = json.NewDecoder(resp.Body).Decode(&payments)
 				require.NoError(t, err)
-				require.Len(t, payments, 2)
-				require.Equal(t, accounts[2].Address, payments[0].To)
+				require.Equal(t, latestBlockHeader, payments.LatestBlock)
+				require.Len(t, payments.Payments, 2)
+				require.Equal(t, accounts[2].Address, payments.Payments[0].To)
 			})
-
 		})
 	})
 }

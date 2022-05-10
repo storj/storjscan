@@ -187,17 +187,26 @@ func TestAllPayments(t *testing.T) {
 			cache := blockchain.NewHeadersCache(logger, db.Headers())
 			service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), 2)
 
+			currentHead, err := client.HeaderByNumber(ctx, nil)
+			require.NoError(t, err)
+			latestBlockHeader := blockchain.Header{
+				Hash:      currentHead.Hash(),
+				Number:    currentHead.Number.Int64(),
+				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
+			}
+
 			t.Run("eu1 from block 0", func(t *testing.T) {
 				payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", 1)
 				require.NoError(t, err)
 
 				// 4 transactions out of 6
-				require.Equal(t, 4, len(payments))
+				require.Equal(t, latestBlockHeader, payments.LatestBlock)
+				require.Equal(t, 4, len(payments.Payments))
 
-				txEqual(t, testPayments[1], payments[0])
-				txEqual(t, testPayments[2], payments[1])
-				txEqual(t, testPayments[4], payments[2])
-				txEqual(t, testPayments[5], payments[3])
+				txEqual(t, testPayments[1], payments.Payments[0])
+				txEqual(t, testPayments[2], payments.Payments[1])
+				txEqual(t, testPayments[4], payments.Payments[2])
+				txEqual(t, testPayments[5], payments.Payments[3])
 
 			})
 			t.Run("eu1 with specified block", func(t *testing.T) {
@@ -205,13 +214,12 @@ func TestAllPayments(t *testing.T) {
 				require.NoError(t, err)
 
 				// 2 transactions out of 6
-				require.Equal(t, 2, len(payments))
+				require.Equal(t, latestBlockHeader, payments.LatestBlock)
+				require.Equal(t, 2, len(payments.Payments))
 
-				txEqual(t, testPayments[4], payments[0])
-				txEqual(t, testPayments[5], payments[1])
-
+				txEqual(t, testPayments[4], payments.Payments[0])
+				txEqual(t, testPayments[5], payments.Payments[1])
 			})
-
 		})
 	})
 }

@@ -93,32 +93,37 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 }
 
 // AllPayments returns all the payments associated with the current satellite.
-func (service *Service) AllPayments(ctx context.Context, satelliteID string, from int64) (_ []Payment, err error) {
+func (service *Service) AllPayments(ctx context.Context, satelliteID string, from int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if satelliteID == "" {
 		// it shouldn't be possible if auth is properly set up
-		return nil, ErrService.New("api identifier is empty")
+		return LatestPayments{}, ErrService.New("api identifier is empty")
 	}
 
 	walletsOfSatellite, err := service.walletDB.ListBySatellite(ctx, satelliteID)
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	client, err := ethclient.DialContext(ctx, service.endpoint)
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
 
 	token, err := erc20.NewERC20(service.token, client)
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
+	}
+	latestBlock, err := client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 
 	var allPayments []Payment
-
 	allWallets := asList(walletsOfSatellite)
+	end := latestBlock.Number.Uint64()
+
 	// query the rpc API in batches
 	for i := 0; i < len(allWallets); i += service.batchSize {
 
@@ -130,27 +135,36 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 
 		opts := &bind.FilterOpts{
 			Start:   uint64(from),
-			End:     nil,
+			End:     &end,
 			Context: ctx,
 		}
 		iter, err := token.FilterTransfer(opts, nil, addresses)
 		if err != nil {
-			return nil, ErrService.Wrap(err)
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
 
 		for iter.Next() {
 			header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
 			if err != nil {
-				return nil, ErrService.Wrap(errs.Combine(err, iter.Close()))
+				return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
 			}
 			allPayments = append(allPayments, paymentFromEvent(iter.Event, header.Timestamp))
 		}
 
-		if err := errs.Combine(iter.Close(), iter.Error()); err != nil {
-			return nil, ErrService.Wrap(err)
+		if err := errs.Combine(iter.Error(), iter.Close()); err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
 	}
-	return allPayments, ErrService.Wrap(err)
+
+	header := blockchain.Header{
+		Hash:      latestBlock.Hash(),
+		Number:    latestBlock.Number.Int64(),
+		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),
+	}
+	return LatestPayments{
+		LatestBlock: header,
+		Payments:    allPayments,
+	}, nil
 }
 
 func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time) Payment {

@@ -25,3 +25,9 @@ type Payment struct {
 	LogIndex    int
 	Timestamp   time.Time
 }
+
+// LatestPayments contains latest payments and latest chain block header.
+type LatestPayments struct {
+	LatestBlock blockchain.Header
+	Payments    []Payment
+}
