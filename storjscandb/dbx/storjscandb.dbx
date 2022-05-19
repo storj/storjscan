@@ -45,8 +45,8 @@ read one (
 
 read first (
 	select token_price
-	where token_price.interval_start > ?
-	orderby asc token_price.interval_start
+	where token_price.interval_start < ?
+	orderby desc token_price.interval_start
 )
 
 model wallet (

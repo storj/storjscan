@@ -33,13 +33,16 @@ func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, 
 	return ErrPriceQuoteDB.Wrap(err)
 }
 
-// GetFirst gets the first token price with timestamp greater than provided window.
-func (priceQuoteDB *priceQuoteDB) GetFirst(ctx context.Context, window time.Time) (pq tokenprice.PriceQuote, err error) {
+// Before gets the first token price with timestamp before provided timestamp.
+func (priceQuoteDB priceQuoteDB) Before(ctx context.Context, before time.Time) (_ tokenprice.PriceQuote, err error) {
 	defer mon.Task()(&ctx)(&err)
-	rows, err := priceQuoteDB.db.First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx,
-		dbx.TokenPrice_IntervalStart(window))
+	rows, err := priceQuoteDB.db.First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx,
+		dbx.TokenPrice_IntervalStart(before))
 	if err != nil {
 		return tokenprice.PriceQuote{}, ErrPriceQuoteDB.Wrap(err)
+	}
+	if rows == nil {
+		return tokenprice.PriceQuote{}, tokenprice.ErrNoQuotes
 	}
 	return tokenprice.PriceQuote{
 		Timestamp: rows.IntervalStart,

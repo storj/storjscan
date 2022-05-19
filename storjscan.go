@@ -67,7 +67,8 @@ type App struct {
 	}
 
 	TokenPrice struct {
-		Chore *tokenprice.Chore
+		Chore   *tokenprice.Chore
+		Service *tokenprice.Service
 	}
 
 	API struct {
@@ -96,6 +97,19 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			db.Headers())
 	}
 
+	{ // token price
+		client := coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
+
+		app.TokenPrice.Chore = tokenprice.NewChore(log.Named("tokenprice:chore"), db.TokenPrice(), client, config.TokenPrice.Interval)
+		app.TokenPrice.Service = tokenprice.NewService(log.Named("tokenprice:service"), db.TokenPrice())
+
+		app.Services.Add(lifecycle.Item{
+			Name:  "tokenprice:chore",
+			Run:   app.TokenPrice.Chore.Run,
+			Close: app.TokenPrice.Chore.Close,
+		})
+	}
+
 	{ // tokens
 		token, err := blockchain.AddressFromHex(config.Tokens.Contract)
 		if err != nil {
@@ -107,20 +121,10 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			token,
 			app.Blockchain.HeadersCache,
 			db.Wallets(),
+			app.TokenPrice.Service,
 			100)
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
-	}
-
-	{ // token price
-		client := coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
-		app.TokenPrice.Chore = tokenprice.NewChore(log.Named("tokenprice:chore"), db.TokenPrice(), client, config.TokenPrice.Interval)
-
-		app.Services.Add(lifecycle.Item{
-			Name:  "tokenprice:chore",
-			Run:   app.TokenPrice.Chore.Run,
-			Close: app.TokenPrice.Chore.Close,
-		})
 	}
 
 	{ // wallets

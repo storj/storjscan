@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokens/erc20"
 	"storj.io/storjscan/wallets"
 )
@@ -31,23 +32,32 @@ type Config struct {
 //
 // architecture: Service
 type Service struct {
-	log       *zap.Logger
-	endpoint  string
-	token     blockchain.Address
-	headers   *blockchain.HeadersCache
-	walletDB  wallets.DB
-	batchSize int
+	log        *zap.Logger
+	endpoint   string
+	token      blockchain.Address
+	headers    *blockchain.HeadersCache
+	walletDB   wallets.DB
+	tokenPrice *tokenprice.Service
+	batchSize  int
 }
 
 // NewService creates new token service instance.
-func NewService(log *zap.Logger, endpoint string, token blockchain.Address, cache *blockchain.HeadersCache, walletDB wallets.DB, batchSize int) *Service {
+func NewService(
+	log *zap.Logger,
+	endpoint string,
+	token blockchain.Address,
+	cache *blockchain.HeadersCache,
+	walletDB wallets.DB,
+	tokenPrice *tokenprice.Service,
+	batchSize int) *Service {
 	return &Service{
-		log:       log,
-		endpoint:  endpoint,
-		token:     token,
-		headers:   cache,
-		walletDB:  walletDB,
-		batchSize: batchSize,
+		log:        log,
+		endpoint:   endpoint,
+		token:      token,
+		headers:    cache,
+		walletDB:   walletDB,
+		tokenPrice: tokenPrice,
+		batchSize:  batchSize,
 	}
 }
 
@@ -79,13 +89,16 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 
 	var payments []Payment
 	for iter.Next() {
-
 		header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
 		if err != nil {
 			return nil, ErrService.Wrap(err)
 		}
+		price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
+		if err != nil {
+			return nil, ErrService.Wrap(err)
+		}
 
-		payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp))
+		payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
 
 	}
 
@@ -148,7 +161,12 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 			if err != nil {
 				return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
 			}
-			allPayments = append(allPayments, paymentFromEvent(iter.Event, header.Timestamp))
+			price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
+			if err != nil {
+				return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
+			}
+
+			allPayments = append(allPayments, paymentFromEvent(iter.Event, header.Timestamp, price))
 		}
 
 		if err := errs.Combine(iter.Error(), iter.Close()); err != nil {
@@ -167,11 +185,12 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	}, nil
 }
 
-func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time) Payment {
+func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time, price float64) Payment {
 	return Payment{
 		From:        event.From,
 		To:          event.To,
 		TokenValue:  event.Value,
+		USDValue:    tokenprice.CalculateValue(event.Value, price),
 		BlockHash:   event.Raw.BlockHash,
 		BlockNumber: int64(event.Raw.BlockNumber),
 		Transaction: event.Raw.TxHash,

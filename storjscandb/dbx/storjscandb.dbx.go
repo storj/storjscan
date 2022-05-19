@@ -1330,15 +1330,15 @@ func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
-	token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
+	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start > ? ORDER BY token_prices.interval_start LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start < ? ORDER BY token_prices.interval_start DESC LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
-	__values = append(__values, token_price_interval_start_greater.value())
+	__values = append(__values, token_price_interval_start_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1836,14 +1836,14 @@ func (rx *Rx) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
 	return tx.Delete_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
 }
 
-func (rx *Rx) First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
-	token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+func (rx *Rx) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
+	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx, token_price_interval_start_greater)
+	return tx.First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx, token_price_interval_start_less)
 }
 
 func (rx *Rx) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
@@ -1958,8 +1958,8 @@ type Methods interface {
 		token_price_interval_start TokenPrice_IntervalStart_Field) (
 		deleted bool, err error)
 
-	First_TokenPrice_By_IntervalStart_Greater_OrderBy_Asc_IntervalStart(ctx context.Context,
-		token_price_interval_start_greater TokenPrice_IntervalStart_Field) (
+	First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
+		token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 		token_price *TokenPrice, err error)
 
 	First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,

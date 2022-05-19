@@ -6,6 +6,16 @@ package tokenprice
 import (
 	"context"
 	"time"
+
+	"github.com/spacemonkeygo/monkit/v3"
+	"github.com/zeebo/errs"
+)
+
+var (
+	// ErrNoQuotes is error when no quotes were found in DB.
+	ErrNoQuotes = errs.New("no quotes in db")
+
+	mon = monkit.Package()
 )
 
 // PriceQuote represents an entry in the token_price table.
@@ -21,6 +31,6 @@ type PriceQuoteDB interface {
 	// Update updates the stored token price for the given time window, or creates a new entry if it does not exist.
 	Update(ctx context.Context, window time.Time, price float64) error
 
-	// GetFirst gets the first token price with timestamp greater than provided window.
-	GetFirst(ctx context.Context, window time.Time) (PriceQuote, error)
+	// Before gets the first token price with timestamp before provided timestamp.
+	Before(ctx context.Context, before time.Time) (PriceQuote, error)
 }

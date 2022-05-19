@@ -34,7 +34,7 @@ func TestChore(t *testing.T) {
 
 		chore.Loop.Pause()
 		chore.Loop.TriggerWait()
-		tokenPrice, err := db.TokenPrice().GetFirst(ctx, time.Time{})
+		tokenPrice, err := db.TokenPrice().Before(ctx, time.Now())
 		require.Nil(t, err)
 		require.NotNil(t, tokenPrice)
 		require.NotEqual(t, time.Time{}, tokenPrice.Timestamp)

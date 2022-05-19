@@ -19,6 +19,7 @@ type Payment struct {
 	From        blockchain.Address
 	To          blockchain.Address
 	TokenValue  *big.Int
+	USDValue    float64
 	BlockHash   blockchain.Hash
 	BlockNumber int64
 	Transaction blockchain.Hash

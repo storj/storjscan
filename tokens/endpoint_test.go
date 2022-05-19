@@ -24,6 +24,7 @@ import (
 	"storj.io/storjscan/private/testeth/testtoken"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
+	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokens"
 )
 
@@ -31,12 +32,14 @@ func TestEndpoint(t *testing.T) {
 	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 			logger := zaptest.NewLogger(t)
-
+			tokenPriceDB := db.TokenPrice()
 			cache := blockchain.NewHeadersCache(logger, db.Headers())
+			tokenPrice := tokenprice.NewService(logger, tokenPriceDB)
+
 			lis, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
 
-			service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), 100)
+			service := tokens.NewService(logger.Named("service"), network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), tokenPrice, 100)
 			endpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
 
 			apiServer := api.NewServer(logger, lis, map[string]string{"eu1": "eu1secret", "us1": "us1secret"})
@@ -91,6 +94,16 @@ func TestEndpoint(t *testing.T) {
 				})
 			require.NoError(t, err)
 
+			// fill token price DB.
+			const price = 2
+			firstBlock := network.Ethereum().BlockChain().GetBlockByNumber(1)
+
+			startTime := time.Unix(int64(firstBlock.Time()), 0).Add(-time.Minute)
+			for i := 0; i < 10; i++ {
+				window := startTime.Add(time.Duration(i) * time.Minute)
+				require.NoError(t, tokenPriceDB.Update(ctx, window, price))
+			}
+
 			// get payments of one wallet
 
 			t.Run("/payments/{address} without authentication", func(t *testing.T) {
@@ -135,7 +148,8 @@ func TestEndpoint(t *testing.T) {
 				err = json.NewDecoder(resp.Body).Decode(&payments)
 				require.NoError(t, err)
 				require.Equal(t, accounts[0].Address, payments[0].From)
-				require.Equal(t, int64(1000000), payments[0].TokenValue.Int64())
+				require.EqualValues(t, 1000000, payments[0].TokenValue.Int64())
+				require.EqualValues(t, 1000000*price, payments[0].USDValue)
 				require.Equal(t, recpt.BlockHash, payments[0].BlockHash)
 				require.Equal(t, recpt.BlockNumber.Int64(), payments[0].BlockNumber)
 				require.Equal(t, tx.Hash(), payments[0].Transaction)
