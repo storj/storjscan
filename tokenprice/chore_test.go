@@ -19,13 +19,8 @@ import (
 
 func TestChore(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
-		config := tokenprice.Config{
-			Interval:            time.Second * 5,
-			CoinmarketcapConfig: coinmarketcaptest.GetConfig(t),
-		}
-
-		client := coinmarketcap.NewClient(config.CoinmarketcapConfig)
-		chore := tokenprice.NewChore(zaptest.NewLogger(t), db.TokenPrice(), client, config.Interval)
+		service := tokenprice.NewService(zaptest.NewLogger(t), db.TokenPrice(), coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		chore := tokenprice.NewChore(zaptest.NewLogger(t), service, time.Second*5)
 
 		defer ctx.Check(chore.Close)
 		ctx.Go(func() error {

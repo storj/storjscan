@@ -22,6 +22,8 @@ import (
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokenprice"
+	"storj.io/storjscan/tokenprice/coinmarketcap"
+	"storj.io/storjscan/tokenprice/coinmarketcaptest"
 	"storj.io/storjscan/tokens"
 )
 
@@ -104,7 +106,7 @@ func TestPayments(t *testing.T) {
 		}
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB)
+		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, nil, tokenPrice, 100)
 
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
@@ -210,7 +212,7 @@ func TestAllPayments(t *testing.T) {
 			}
 
 			cache := blockchain.NewHeadersCache(logger, db.Headers())
-			tokenPrice := tokenprice.NewService(logger, tokenPriceDB)
+			tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 			service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), tokenPrice, 100)
 
 			currentHead, err := client.HeaderByNumber(ctx, nil)

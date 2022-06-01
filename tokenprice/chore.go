@@ -11,38 +11,28 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/common/sync2"
-	"storj.io/storjscan/tokenprice/coinmarketcap"
 )
 
 // ErrChore is an error class for coinmarketcap API client error.
 var ErrChore = errs.Class("Chore")
 
-// Config is a configuration struct for the Chore.
-type Config struct {
-	Interval time.Duration `help:"how often to run the chore" default:"1m" testDefault:"$TESTINTERVAL"`
-
-	CoinmarketcapConfig coinmarketcap.Config
-}
-
 // Chore to save storj ticker price to local DB.
 //
 // architecture: Chore
 type Chore struct {
-	log    *zap.Logger
-	db     PriceQuoteDB
-	client *coinmarketcap.Client
+	log     *zap.Logger
+	service *Service
 
 	Loop *sync2.Cycle
 }
 
 // NewChore creates new chore for saving storj ticker price to local DB.
-func NewChore(log *zap.Logger, db PriceQuoteDB, client *coinmarketcap.Client, interval time.Duration) *Chore {
+func NewChore(log *zap.Logger, service *Service, interval time.Duration) *Chore {
 
 	return &Chore{
-		log:    log,
-		db:     db,
-		client: client,
-		Loop:   sync2.NewCycle(interval),
+		log:     log,
+		service: service,
+		Loop:    sync2.NewCycle(interval),
 	}
 }
 
@@ -60,11 +50,11 @@ func (chore *Chore) Run(ctx context.Context) (err error) {
 
 // RunOnce gets the latest storj ticker price and saves it to the DB.
 func (chore *Chore) RunOnce(ctx context.Context) (err error) {
-	timeWindow, price, err := chore.client.GetLatestPrice(ctx)
+	timeWindow, price, err := chore.service.LatestPrice(ctx)
 	if err != nil {
 		return err
 	}
-	err = chore.db.Update(ctx, timeWindow.Truncate(time.Minute), price)
+	err = chore.service.SavePrice(ctx, timeWindow.Truncate(time.Minute), price)
 	return err
 }
 

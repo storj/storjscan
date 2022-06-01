@@ -25,6 +25,8 @@ import (
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokenprice"
+	"storj.io/storjscan/tokenprice/coinmarketcap"
+	"storj.io/storjscan/tokenprice/coinmarketcaptest"
 	"storj.io/storjscan/tokens"
 )
 
@@ -34,7 +36,7 @@ func TestEndpoint(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			tokenPriceDB := db.TokenPrice()
 			cache := blockchain.NewHeadersCache(logger, db.Headers())
-			tokenPrice := tokenprice.NewService(logger, tokenPriceDB)
+			tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 
 			lis, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)

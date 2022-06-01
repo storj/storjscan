@@ -14,7 +14,7 @@ import (
 
 // GenerateConfig for wallet address generation.
 type GenerateConfig struct {
-	Address      string `help:"public address to listen on" default:"http://127.0.0.1:10000"`
+	Address      string `help:"public address to listen on" default:"http://127.0.0.1:12000"`
 	APIKey       string `help:"Secrets to connect to service endpoints."`
 	APISecret    string `help:"Secrets to connect to service endpoints."`
 	MnemonicFile string `help:"File which contains the mnemonic to be used for HD generation." default:".mnemonic"`
