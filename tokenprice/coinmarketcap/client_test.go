@@ -110,3 +110,16 @@ func getConfigBadKey(url string) coinmarketcap.Config {
 		APIKey:  "123abc",
 	}
 }
+
+func Test_TestClient(t *testing.T) {
+	ctx := testcontext.New(t)
+	client := coinmarketcap.NewTestClient()
+	ts, price, err := client.GetLatestPrice(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, ts)
+	require.Equal(t, float64(1), price)
+	ts, price, err = client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
+	require.NoError(t, err)
+	require.NotNil(t, ts)
+	require.Equal(t, float64(1), price)
+}
