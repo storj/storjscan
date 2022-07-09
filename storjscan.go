@@ -98,7 +98,12 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	}
 
 	{ // token price
-		client := coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
+		var client tokenprice.Client
+		if config.TokenPrice.UseTestPrices {
+			client = coinmarketcap.NewTestClient()
+		} else {
+			client = coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
+		}
 		app.TokenPrice.Service = tokenprice.NewService(log.Named("tokenprice:service"), db.TokenPrice(), client, config.TokenPrice.Interval)
 		app.TokenPrice.Chore = tokenprice.NewChore(log.Named("tokenprice:chore"), app.TokenPrice.Service, config.TokenPrice.Interval)
 

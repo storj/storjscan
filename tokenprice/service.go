@@ -10,8 +10,6 @@ import (
 
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
-
-	"storj.io/storjscan/tokenprice/coinmarketcap"
 )
 
 // ErrService is token price service error class.
@@ -21,12 +19,12 @@ var ErrService = errs.Class("tokenprice service")
 type Service struct {
 	log         *zap.Logger
 	db          PriceQuoteDB
-	client      *coinmarketcap.Client
+	client      Client
 	priceWindow time.Duration
 }
 
 // NewService creates new service.
-func NewService(log *zap.Logger, db PriceQuoteDB, client *coinmarketcap.Client, priceWindow time.Duration) *Service {
+func NewService(log *zap.Logger, db PriceQuoteDB, client Client, priceWindow time.Duration) *Service {
 	return &Service{
 		log:         log,
 		db:          db,

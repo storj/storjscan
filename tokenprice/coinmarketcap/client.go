@@ -32,6 +32,7 @@ type Config struct {
 }
 
 // Client is used to query the coinmarketcap API for the STORJ token price.
+// implements tokenprice.Client interface
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
@@ -135,4 +136,22 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 		return time.Time{}, 0, ErrClient.Wrap(err)
 	}
 	return returnedTimestamp, formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Price, nil
+}
+
+// TestClient implements the Client interface for test purposes (bypassing coinmarketcap 3rd party api calls)
+type TestClient struct{}
+
+// NewTestClient returns a new test token price client.
+func NewTestClient() *TestClient {
+	return &TestClient{}
+}
+
+// GetLatestPrice gets the latest available ticker price.
+func (tc *TestClient) GetLatestPrice(ctx context.Context) (time.Time, float64, error) {
+	return time.Now(), 1, nil
+}
+
+// GetPriceAt gets the ticker price at the specified time.
+func (tc *TestClient) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, float64, error) {
+	return requestedTimestamp, 1, nil
 }
