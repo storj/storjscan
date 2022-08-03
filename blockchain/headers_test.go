@@ -143,10 +143,18 @@ func TestHeadersCache(t *testing.T) {
 }
 
 func TestHeadersCacheMissingHeader(t *testing.T) {
+	t.Run("Postgres", func(t *testing.T) {
+		testHeadersCacheMissingHeader(t, pgtest.PickPostgres(t))
+	})
+	t.Run("Cockroach", func(t *testing.T) {
+		testHeadersCacheMissingHeader(t, pgtest.PickCockroach(t))
+	})
+}
+
+func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
 	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
 		logger := zaptest.NewLogger(t)
 
-		connStr := pgtest.PickPostgres(t)
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
 			t.Fatal(err)

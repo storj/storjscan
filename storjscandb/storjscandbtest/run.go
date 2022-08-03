@@ -45,6 +45,26 @@ func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, db *DB)
 
 		test(ctx, t, db)
 	})
+
+	t.Run("Cockroach", func(t *testing.T) {
+		ctx := testcontext.New(t)
+		defer ctx.Cleanup()
+
+		connStr := pgtest.PickCockroach(t)
+
+		db, err := OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Check(db.Close)
+
+		err = db.MigrateToLatest(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		test(ctx, t, db)
+	})
 }
 
 // DB is test storjscan database with unique schema which performs cleanup on close.

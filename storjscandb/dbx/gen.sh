@@ -1,7 +1,7 @@
 #!/bin/sh
 
-dbx schema -d pgx storjscandb.dbx .
-dbx golang -d pgx -p dbx -t templates storjscandb.dbx .
+dbx schema -d pgx -d pgxcockroach storjscandb.dbx .
+dbx golang -d pgx -d pgxcockroach -p dbx -t templates storjscandb.dbx .
 ( printf '%s\n' '//lint:file-ignore U1000,ST1012 generated file'; cat storjscandb.dbx.go ) > storjscandb.dbx.go.tmp && mv storjscandb.dbx.go.tmp storjscandb.dbx.go
 gofmt -r "*sql.Tx -> tagsql.Tx" -w storjscandb.dbx.go
 gofmt -r "*sql.Rows -> tagsql.Rows" -w storjscandb.dbx.go

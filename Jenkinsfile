@@ -56,6 +56,11 @@ pipeline {
                 stage('db') {
                    steps {
                        sh 'service postgresql start'
+
+                       dir('.build') {
+                           sh 'cockroach start-single-node --insecure --store=\'/tmp/crdb\' --listen-addr=localhost:26257 --http-addr=localhost:8080 --cache 512MiB --max-sql-memory 512MiB --background'
+                       }
+
                    }
                 }
             }
@@ -79,10 +84,12 @@ pipeline {
                 stage('Tests') {
                     environment {
                         STORJ_TEST_POSTGRES = 'postgres://postgres@localhost/teststorjscan?sslmode=disable'
+                        STORJ_TEST_COCKROACH = 'cockroach://root@localhost:26257/testcockroach?sslmode=disable'
                         COVERFLAGS = "${ env.BRANCH_NAME == 'main' ? '-coverprofile=.build/coverprofile -coverpkg=storj.io/storjscan/...' : ''}"
                     }
                     steps {
                         sh 'psql -U postgres -c \'create database teststorjscan;\''
+                        sh 'cockroach sql --insecure --host=localhost:26257 -e \'create database testcockroach;\''
                         sh 'go test -parallel 4 -p 6 -vet=off $COVERFLAGS -timeout 8m -json -race ./... 2>&1 | tee .build/tests.json | xunit -out .build/tests.xml'
                     }
 

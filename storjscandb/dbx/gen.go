@@ -11,6 +11,7 @@ import (
 	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 
+	"storj.io/private/dbutil/cockroachutil"
 	"storj.io/private/dbutil/txutil"
 	"storj.io/private/tagsql"
 )
@@ -32,6 +33,9 @@ func init() {
 		return class.Wrap(e)
 	}
 	ShouldRetry = func(driver string, err error) bool {
+		if driver == "pgxcockroach" || driver == "cockroach" {
+			return cockroachutil.NeedsRetry(err)
+		}
 		return false
 	}
 }

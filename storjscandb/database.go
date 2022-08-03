@@ -5,6 +5,7 @@ package storjscandb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
@@ -43,7 +44,7 @@ func Open(ctx context.Context, log *zap.Logger, databaseURL string) (*DB, error)
 	if err != nil {
 		return nil, err
 	}
-	if impl != dbutil.Postgres {
+	if impl != dbutil.Postgres && impl != dbutil.Cockroach {
 		return nil, Error.New("unsupported driver %q", driver)
 	}
 
@@ -74,10 +75,36 @@ func Open(ctx context.Context, log *zap.Logger, databaseURL string) (*DB, error)
 
 // MigrateToLatest migrates db to the latest version.
 func (db *DB) MigrateToLatest(ctx context.Context) error {
-	var migration *migrate.Migration
-
 	switch db.implementation {
 	case dbutil.Postgres:
+		schema, err := pgutil.ParseSchemaFromConnstr(db.source)
+		if err != nil {
+			return errs.New("error parsing schema: %+v", err)
+		}
+
+		if schema != "" {
+			err = pgutil.CreateSchema(ctx, db, schema)
+			if err != nil {
+				return errs.New("error creating schema: %+v", err)
+			}
+		}
+
+	case dbutil.Cockroach:
+		var dbName string
+		if err := db.QueryRow(ctx, `SELECT current_database();`).Scan(&dbName); err != nil {
+			return errs.New("error querying current database: %+v", err)
+		}
+
+		_, err := db.Exec(ctx, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`,
+			pgutil.QuoteIdentifier(dbName)))
+		if err != nil {
+			return errs.Wrap(err)
+		}
+	}
+
+	var migration *migrate.Migration
+	switch db.implementation {
+	case dbutil.Postgres, dbutil.Cockroach:
 		migration = db.PostgresMigration()
 	default:
 		return migrate.Create(ctx, "database", db.DB)
