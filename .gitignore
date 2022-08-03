@@ -25,3 +25,9 @@ build
 .idea
 
 .mnemonic
+
+tmp/
+
+storjscan.last
+
+test/
