@@ -38,10 +38,9 @@ var (
 			return run(ctx, runCfg)
 		},
 	}
-
-	setupCmd = &cobra.Command{
+	migrateCmd = &cobra.Command{
 		Use:   "migrate",
-		Short: "Run database migration",
+		Short: "Execute database migration.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, _ := process.Ctx(cmd)
 			return migrate(ctx, runCfg)
@@ -78,40 +77,19 @@ var (
 	}
 )
 
-// migrate executes the database migration on an existing database.
-func migrate(ctx context.Context, config runConfig) error {
-	logger := zap.NewExample()
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Println(err)
-		}
-	}()
-
-	db, err := openDatabaseWithRetry(ctx, logger, config.Database)
-	if err != nil {
-		return err
-	}
-
-	if config.WithMigration {
-		err := db.MigrateToLatest(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type runConfig struct {
 	storjscan.Config
-	Database      string `help:"satellite database connection string" releaseDefault:"postgres://" devDefault:"postgres://"`
-	WithMigration bool   `help:"run database migration before the start" releaseDefault:"false" devDefault:"true"`
+	Database      string `help:"satellite database connection string" releaseDefault:"cockroach://" devDefault:"postgres://"`
+	WithMigration bool   `help:"automatically run database migration before the start" releaseDefault:"false" devDefault:"true"`
 }
 
 func init() {
 	defaults := cfgstruct.DefaultsFlag(rootCmd)
 	rootCmd.AddCommand(runCmd)
-	rootCmd.AddCommand(setupCmd)
 	process.Bind(runCmd, &runCfg, defaults)
+
+	rootCmd.AddCommand(migrateCmd)
+	process.Bind(migrateCmd, &runCfg, defaults)
 
 	rootCmd.AddCommand(generateCmd)
 	process.Bind(generateCmd, &generateCfg, defaults)
@@ -125,20 +103,23 @@ func main() {
 }
 
 func run(ctx context.Context, config runConfig) error {
-	logger := zap.NewExample()
+	logger := zap.L()
 	defer func() {
 		if err := logger.Sync(); err != nil {
 			log.Println(err)
 		}
 	}()
-
 	db, err := openDatabaseWithRetry(ctx, logger, config.Database)
 	if err != nil {
 		return err
 	}
 
+	defer func() {
+		err = errs.Combine(err, db.Close())
+	}()
+
 	if config.WithMigration {
-		err := db.MigrateToLatest(ctx)
+		err = migrate(ctx, config)
 		if err != nil {
 			return err
 		}
@@ -151,7 +132,8 @@ func run(ctx context.Context, config runConfig) error {
 
 	runErr := app.Run(ctx)
 	closeErr := app.Close()
-	return errs.Combine(runErr, closeErr)
+	err = errs.Combine(runErr, closeErr)
+	return err
 }
 
 func openDatabaseWithRetry(ctx context.Context, logger *zap.Logger, databaseURL string) (db *storjscandb.DB, err error) {
@@ -166,4 +148,25 @@ func openDatabaseWithRetry(ctx context.Context, logger *zap.Logger, databaseURL 
 
 	}
 	return db, err
+}
+
+// migrate executes the database migration on an existing database.
+func migrate(ctx context.Context, config runConfig) (err error) {
+	logger := zap.L()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Println(err)
+		}
+	}()
+	db, err := openDatabaseWithRetry(ctx, logger, config.Database)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err = errs.Combine(err, db.Close())
+	}()
+
+	err = db.MigrateToLatest(ctx)
+	return err
 }

@@ -16,10 +16,11 @@ Storjscan creates local POA blockchain network to test code that interacts with 
 
 Tests that require postgres DB are skipped by default.
 
-To enable it `STORJ_POSTGRES_TEST` env should be set with postgres connection string pointing to test database.
+To enable it `STORJ_POSTGRES_TEST` and/or `STORJ_COCKROACH_TEST` env should be set with postgres/cockroach connection strings pointing to test database(s).
 
 ```bash
 export STORJ_POSTGRES_TEST=postgres://postgres@localhost/teststorjscan?sslmode=disable
+export STORJ_COCKROACH_TEST=cockroach://root@localhost:26257/testcockroach?sslmode=disable
 go test -race ./...
 ```
 
@@ -28,18 +29,23 @@ go test -race ./...
 Requirements:
 
 * Running blockchain
-* Postgres database backend
+* Postgres (or Cockroach) database backend
 
 Example parameters:
 
 ```bash
+./build/storjscan migrate --database="postgres://postgres@localhost:5432/storjscandb?sslmode=disable"
+
 ./build/storjscan run \
---database=postgres://postgres@localhost/storjscandb?sslmode=disable \
+--database="postgres://postgres@localhost:5432/storjscandb?sslmode=disable" \
 --tokens.endpoint="https://mainnet.example-node.address" \
 --tokens.token-address=0xB64ef51C888972c908CFacf59B47C1AfBC0Ab8aC \
 --api.address="127.0.0.1:10000" \
---api.keys="eu1:eu1secret" 
+--api.keys="eu1:eu1secret" \
+--token-price.coinmarketcap-config.base-url="https://sandbox-api.coinmarketcap.com" \
+--token-price.coinmarketcap-config.api-key="b54bcf4d-1bca-4e8e-9a24-22ff2c3d462c"
 ```
+The separate migration step above is optional (`--with-migration` dev default is true)
 
 ## Local development run
 
@@ -91,13 +97,18 @@ Now you have two options:
 If you prefer the first, you can start storj scan:
 
 ```bash
+go run ./cmd/storjscan migrate --database="postgres://postgres@localhost:5432/storjscandb?sslmode=disable"
+
 go run ./cmd/storjscan run \
---database='postgres://storjscan@localhost:5442/storjscandb?sslmode=disable' \
+--database="postgres://postgres@localhost:5432/storjscandb?sslmode=disable" \
 --tokens.endpoint="http://localhost:8545" \
 --tokens.contract=0x1E119A589270646585b044db12098B1e456a88Af \
 --api.address="127.0.0.1:12000" \
---api.keys="eu1:eu1secret" 
+--api.keys="eu1:eu1secret" \
+--token-price.coinmarketcap-config.base-url="https://sandbox-api.coinmarketcap.com" \
+--token-price.coinmarketcap-config.api-key="b54bcf4d-1bca-4e8e-9a24-22ff2c3d462c"
 ```
+The separate migration step above is optional (`--with-migration` dev default is true)
 
 If you prefer to run everything in docker, you need to cross-compile a static binary:
 
