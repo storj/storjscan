@@ -17,6 +17,7 @@ import (
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/health"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokens"
@@ -41,6 +42,8 @@ type DB interface {
 	TokenPrice() tokenprice.PriceQuoteDB
 	// Wallets returns database for deposit address information.
 	Wallets() wallets.DB
+	// Ping checks if the database connection is available.
+	Ping(context.Context) error
 }
 
 // App is the storjscan process that runs API endpoint.
@@ -79,6 +82,10 @@ type App struct {
 	Wallets struct {
 		Service  *wallets.Service
 		Endpoint *wallets.Endpoint
+	}
+
+	Health struct {
+		Endpoint *health.Endpoint
 	}
 }
 
@@ -140,6 +147,10 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.Wallets.Endpoint = wallets.NewEndpoint(log.Named("wallets:endpoint"), app.Wallets.Service)
 	}
 
+	{ // health check
+		app.Health.Endpoint = health.NewEndpoint(log.Named("health:endpoint"), db, app.TokenPrice.Service, app.Tokens.Service)
+	}
+
 	{ // API
 		var err error
 
@@ -155,6 +166,7 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.API.Server = api.NewServer(log.Named("api:server"), app.API.Listener, apiKeys)
 		app.API.Server.NewAPI("/tokens", app.Tokens.Endpoint.Register)
 		app.API.Server.NewAPI("/wallets", app.Wallets.Endpoint.Register)
+		app.API.Server.NewAPI("/health", app.Health.Endpoint.Register)
 
 		app.Servers.Add(lifecycle.Item{
 			Name:  "api",

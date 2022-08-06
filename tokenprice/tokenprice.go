@@ -22,4 +22,6 @@ type Client interface {
 	GetLatestPrice(context.Context) (time.Time, float64, error)
 	// GetPriceAt gets the ticker price at the specified time.
 	GetPriceAt(context.Context, time.Time) (time.Time, float64, error)
+	// Ping checks that the third-party api is available for use.
+	Ping(ctx context.Context) (int, error)
 }

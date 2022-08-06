@@ -19,7 +19,7 @@ var ErrPriceQuoteDB = errs.Class("PriceQuoteDB")
 // ensures that priceQuoteDB implements tokenprice.PriceEntryDB.
 var _ tokenprice.PriceQuoteDB = (*priceQuoteDB)(nil)
 
-// TokenPriceDB is the token price database dbx postgres implementation that stores STORJ token price information.
+// TokenPriceDB provides access to the database that stores STORJ token price information.
 //
 // architecture: Database
 type priceQuoteDB struct {

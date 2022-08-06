@@ -285,6 +285,14 @@ func testAllPayments(t *testing.T, connStr string) {
 
 }
 
+func TestPing(t *testing.T) {
+	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+		service := tokens.NewService(zaptest.NewLogger(t), network.HTTPEndpoint(), tokenAddress, nil, nil, nil, 100)
+		err := service.Ping(ctx)
+		require.NoError(t, err)
+	})
+}
+
 func txEqual(t *testing.T, s struct {
 	Amount      int64
 	From        accounts.Account

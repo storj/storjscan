@@ -123,3 +123,31 @@ func Test_TestClient(t *testing.T) {
 	require.NotNil(t, ts)
 	require.Equal(t, float64(1), price)
 }
+
+func TestPing(t *testing.T) {
+	// bad url
+	ctx := testcontext.New(t)
+	client := coinmarketcap.NewClient(getConfigBadURL(t))
+	status, err := client.Ping(ctx)
+	require.Error(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, status)
+
+	// bad key
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		err := json.NewEncoder(w).Encode(getErrorResponseBadKey())
+		require.NoError(t, err)
+	}))
+	defer ts.Close()
+
+	client = coinmarketcap.NewClient(getConfigBadKey(ts.URL))
+	status, err = client.Ping(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusUnauthorized, status)
+
+	// ok
+	client = coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t))
+	status, err = client.Ping(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, status)
+}

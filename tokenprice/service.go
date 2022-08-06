@@ -71,3 +71,9 @@ func (service *Service) SavePrice(ctx context.Context, timestamp time.Time, pric
 	defer mon.Task()(&ctx)(&err)
 	return service.db.Update(ctx, timestamp, price)
 }
+
+// Ping checks that the third-party api is available for use.
+func (service *Service) Ping(ctx context.Context) (statusCode int, err error) {
+	defer mon.Task()(&ctx)(&err)
+	return service.client.Ping(ctx)
+}

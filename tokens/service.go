@@ -185,6 +185,20 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	}, nil
 }
 
+// Ping checks that blockchain service is available for use.
+func (service *Service) Ping(ctx context.Context) (err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	client, err := ethclient.DialContext(ctx, service.endpoint)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	// check if service is reachable by getting the latest block
+	_, err = client.HeaderByNumber(ctx, nil)
+	return err
+}
+
 func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time, price float64) Payment {
 	return Payment{
 		From:        event.From,

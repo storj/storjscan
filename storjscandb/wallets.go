@@ -20,7 +20,7 @@ var ErrWalletsDB = errs.Class("WalletsDB")
 // ensures that walletsDB implements wallets.DB.
 var _ wallets.DB = (*walletsDB)(nil)
 
-// walletsDB is wallets database dbx postgres implementation that stores deposit address information. Implements wallets.DB.
+// walletsDB contains access to the database that stores deposit address information. Implements wallets.DB.
 //
 // architecture: Database
 type walletsDB struct {

@@ -127,6 +127,11 @@ func (db *DB) Wallets() wallets.DB {
 	return &walletsDB{db: db.DB}
 }
 
+// Ping checks if the database connection is available.
+func (db *DB) Ping(ctx context.Context) error {
+	return db.DB.Ping(ctx)
+}
+
 // PostgresMigration returns steps needed for migrating postgres database.
 func (db *DB) PostgresMigration() *migrate.Migration {
 	return &migrate.Migration{

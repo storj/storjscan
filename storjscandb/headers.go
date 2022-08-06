@@ -20,7 +20,7 @@ var ErrHeadersDB = errs.Class("HeadersDB")
 // ensures that headersDB implements blockchain.HeadersDB.
 var _ blockchain.HeadersDB = (*headersDB)(nil)
 
-// headersDB is headers database cache dbx postgres implementation.
+// headersDB contains access to the database that stores blockchain headers.
 //
 // architecture: Database
 type headersDB struct {

@@ -138,6 +138,30 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 	return returnedTimestamp, formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Price, nil
 }
 
+// Ping checks that the coinmarketcap third-party api is available for use.
+func (c *Client) Ping(ctx context.Context) (statusCode int, err error) {
+	q := url.Values{}
+	q.Add("id", storjID)
+	q.Add("convert", usdSymbol)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/key/info", nil)
+	if err != nil {
+		return statusCode, err
+	}
+
+	req.Header.Set("Accepts", "application/json")
+	req.Header.Add("X-CMC_PRO_API_KEY", c.apiKey)
+
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return http.StatusServiceUnavailable, err
+	}
+
+	return resp.StatusCode, resp.Body.Close()
+}
+
 // TestClient implements the Client interface for test purposes (bypassing coinmarketcap 3rd party api calls).
 type TestClient struct{}
 
@@ -154,4 +178,9 @@ func (tc *TestClient) GetLatestPrice(ctx context.Context) (time.Time, float64, e
 // GetPriceAt gets the ticker price at the specified time.
 func (tc *TestClient) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, float64, error) {
 	return requestedTimestamp, 1, nil
+}
+
+// Ping checks that the api is available for use.
+func (tc *TestClient) Ping(ctx context.Context) (statusCode int, err error) {
+	return http.StatusOK, nil
 }
