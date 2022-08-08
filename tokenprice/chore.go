@@ -38,6 +38,7 @@ func NewChore(log *zap.Logger, service *Service, interval time.Duration) *Chore 
 
 // Run starts the chore.
 func (chore *Chore) Run(ctx context.Context) (err error) {
+	defer mon.Task()(&ctx)(&err)
 	return chore.Loop.Run(ctx, func(ctx context.Context) error {
 		err := chore.RunOnce(ctx)
 		if err != nil {
@@ -50,6 +51,7 @@ func (chore *Chore) Run(ctx context.Context) (err error) {
 
 // RunOnce gets the latest storj ticker price and saves it to the DB.
 func (chore *Chore) RunOnce(ctx context.Context) (err error) {
+	defer mon.Task()(&ctx)(&err)
 	timeWindow, price, err := chore.service.LatestPrice(ctx)
 	if err != nil {
 		return err
