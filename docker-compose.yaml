@@ -1,11 +1,11 @@
 version: "3.4"
 services:
   storjscan:
-    image: img.dev.storj.io/storjup/storjscan:20220802-2
+    image: img.dev.storj.io/storjup/storjscan:20220808-1
     command:
       - /app/storjscan
       - run
-      - --database=postgres://storjscan@db/storjscandb
+      - --database=cockroach://root@cockroach:26257/master?sslmode=disable
       - --tokens.endpoint=http://geth:8545
       - --tokens.contract=0x1E119A589270646585b044db12098B1e456a88Af
       - --token-price.interval=1m
@@ -18,14 +18,20 @@ services:
       - "12000:12000"
     networks:
       default: null
-  db:
-    image: postgres:12.5
-    environment:
-      POSTGRES_USER: storjscan
-      POSTGRES_DB: storjscandb
-      POSTGRES_HOST_AUTH_METHOD: "trust"
+  cockroach:
+    command:
+      - start-single-node
+      - --insecure
+      - --http-addr
+      - 127.0.0.1:1234
+    image: cockroachdb/cockroach
+    networks:
+      default: null
     ports:
-      - "5442:5432"
+      - mode: ingress
+        target: 26257
+        published: 26257
+        protocol: tcp
   geth:
     image: ethereum/client-go
     command:

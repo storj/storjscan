@@ -42,7 +42,7 @@ curl -X GET -u "eu1:eu1secret" http://127.0.0.1:12000/api/v0/tokens/payments/$WA
 
 export WALLET=$(grep -w -o "0x[0-9a-zA-Z]*" .accounts.yaml | sed -n 2p)
 
-curl -X GET -u "eu1:eu1secret" http://127.0.0.1:12000/api/v0/tokens/payments/$WALLET
+curl -X GET -u "us1:us1secret" http://127.0.0.1:12000/api/v0/tokens/payments/$WALLET
 
 # todo: find a way to verify these outputs
 
