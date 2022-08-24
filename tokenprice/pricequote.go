@@ -9,6 +9,8 @@ import (
 
 	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
+
+	"storj.io/common/currency"
 )
 
 var (
@@ -21,7 +23,7 @@ var (
 // PriceQuote represents an entry in the token_price table.
 type PriceQuote struct {
 	Timestamp time.Time
-	Price     float64
+	Price     currency.Amount
 }
 
 // PriceQuoteDB is STORJ token price database.
@@ -29,7 +31,7 @@ type PriceQuote struct {
 // architecture: Database
 type PriceQuoteDB interface {
 	// Update updates the stored token price for the given time window, or creates a new entry if it does not exist.
-	Update(ctx context.Context, window time.Time, price float64) error
+	Update(ctx context.Context, window time.Time, price int64) error
 
 	// Before gets the first token price with timestamp before provided timestamp.
 	Before(ctx context.Context, before time.Time) (PriceQuote, error)

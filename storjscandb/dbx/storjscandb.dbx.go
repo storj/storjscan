@@ -329,7 +329,7 @@ func (obj *pgxDB) Schema() string {
 );
 CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
-	price double precision NOT NULL,
+	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
@@ -449,7 +449,7 @@ func (obj *pgxcockroachDB) Schema() string {
 );
 CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
-	price double precision NOT NULL,
+	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
@@ -614,7 +614,7 @@ func (BlockHeader_CreatedAt_Field) _Column() string { return "created_at" }
 
 type TokenPrice struct {
 	IntervalStart time.Time
-	Price         float64
+	Price         int64
 }
 
 func (TokenPrice) _Table() string { return "token_prices" }
@@ -645,10 +645,10 @@ func (TokenPrice_IntervalStart_Field) _Column() string { return "interval_start"
 type TokenPrice_Price_Field struct {
 	_set   bool
 	_null  bool
-	_value float64
+	_value int64
 }
 
-func TokenPrice_Price(v float64) TokenPrice_Price_Field {
+func TokenPrice_Price(v int64) TokenPrice_Price_Field {
 	return TokenPrice_Price_Field{_set: true, _value: v}
 }
 

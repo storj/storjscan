@@ -29,13 +29,14 @@ model token_price (
 	key interval_start
 
 	field interval_start timestamp
-	field price          float64   ( updatable )
+	field price          int64     ( updatable )
 )
 
 create token_price (
 	noreturn
 	replace
 )
+
 delete token_price ( where token_price.interval_start = ? )
 
 read one (
@@ -63,19 +64,19 @@ model wallet (
 
 create wallet ( )
 update wallet (
-    where wallet.address = ?
-    where wallet.satellite = ?
+	where wallet.address   = ?
+	where wallet.satellite = ?
 )
 
 read one (
 	select wallet
-	where wallet.address = ?
+	where wallet.address   = ?
 	where wallet.satellite = ?
 )
 
 read first (
 	select wallet
-	where wallet.claimed = null
+	where wallet.claimed   = null
 	where wallet.satellite = ?
 )
 
@@ -95,6 +96,6 @@ read count (
 
 read all (
 	select wallet
-	where wallet.satellite = ?
-	where wallet.claimed != null
+	where wallet.satellite =  ?
+	where wallet.claimed   != null
 )

@@ -9,6 +9,7 @@ import (
 
 	"github.com/zeebo/errs"
 
+	"storj.io/common/currency"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/tokenprice"
 )
@@ -27,7 +28,7 @@ type priceQuoteDB struct {
 }
 
 // Update updates the stored token price for the given time window, or creates a new entry if it does not exist.
-func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, price float64) (err error) {
+func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, price int64) (err error) {
 	defer mon.Task()(&ctx)(&err)
 	err = priceQuoteDB.db.ReplaceNoReturn_TokenPrice(ctx, dbx.TokenPrice_IntervalStart(window), dbx.TokenPrice_Price(price))
 	return ErrPriceQuoteDB.Wrap(err)
@@ -46,6 +47,6 @@ func (priceQuoteDB priceQuoteDB) Before(ctx context.Context, before time.Time) (
 	}
 	return tokenprice.PriceQuote{
 		Timestamp: rows.IntervalStart,
-		Price:     rows.Price,
+		Price:     currency.AmountFromBaseUnits(rows.Price, currency.USDollarsMicro),
 	}, nil
 }

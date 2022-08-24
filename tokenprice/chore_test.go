@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"storj.io/common/currency"
 	"storj.io/common/testcontext"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokenprice"
@@ -33,6 +34,6 @@ func TestChore(t *testing.T) {
 		require.Nil(t, err)
 		require.NotNil(t, tokenPrice)
 		require.NotEqual(t, time.Time{}, tokenPrice.Timestamp)
-		require.NotEqual(t, 0, tokenPrice.Price)
+		require.False(t, currency.AmountFromBaseUnits(0, currency.USDollarsMicro).Equal(tokenPrice.Price))
 	})
 }

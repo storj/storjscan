@@ -152,7 +152,7 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;
 					CREATE TABLE token_prices (
 						interval_start timestamp with time zone NOT NULL,
-						price double precision NOT NULL,
+						price bigint NOT NULL,
 						PRIMARY KEY ( interval_start )
 					);
 					CREATE TABLE wallets (
