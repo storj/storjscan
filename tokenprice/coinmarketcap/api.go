@@ -3,6 +3,8 @@
 
 package coinmarketcap
 
+import "github.com/shopspring/decimal"
+
 // status is the status structure for the coinmarketcap api.
 type status struct {
 	Timestamp    string `json:"timestamp"`
@@ -20,7 +22,7 @@ type quoteLatestResponse struct {
 
 // quoteLatestData struct contains the latest quote map as well as metadata.
 type quoteLatestData struct {
-	ID     float64                `json:"id"`
+	ID     int64                  `json:"id"`
 	Name   string                 `json:"name"`
 	Symbol string                 `json:"symbol"`
 	Quote  map[string]latestQuote `json:"quote"`
@@ -28,8 +30,8 @@ type quoteLatestData struct {
 
 // latestQuote is the quote structure for the latest data.
 type latestQuote struct {
-	Price       float64 `json:"price"`
-	LastUpdated string  `json:"last_updated"`
+	Price       decimal.Decimal `json:"price"`
+	LastUpdated string          `json:"last_updated"`
 }
 
 // QuoteHistoricResponse is the response structure from the coinmarketcap api for historic data.
@@ -40,7 +42,7 @@ type quoteHistoricResponse struct {
 
 // QuoteHistoricData struct contains historic quote map as well as metadata.
 type quoteHistoricData struct {
-	ID     float64          `json:"id"`
+	ID     int64            `json:"id"`
 	Name   string           `json:"name"`
 	Symbol string           `json:"symbol"`
 	Quotes []historicQuotes `json:"quotes"`
@@ -53,6 +55,6 @@ type historicQuotes struct {
 
 // HistoricQuote is the quote structure for historical data.
 type historicQuote struct {
-	Price     float64 `json:"price"`
-	Timestamp string  `json:"timestamp"`
+	Price     decimal.Decimal `json:"price"`
+	Timestamp string          `json:"timestamp"`
 }

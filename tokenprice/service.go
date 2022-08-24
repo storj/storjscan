@@ -50,11 +50,11 @@ func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ flo
 		if timestamp.Sub(priceTimestamp) > service.priceWindow {
 			return 0, ErrService.New("retrieved price does not meet requirements")
 		}
-		err = service.db.Update(ctx, priceTimestamp.Truncate(time.Minute), price)
+		err = service.db.Update(ctx, priceTimestamp.Truncate(time.Minute), price.AsUnpreciseFloat())
 		if err != nil {
-			return price, ErrService.Wrap(err)
+			return price.AsUnpreciseFloat(), ErrService.Wrap(err)
 		}
-		return price, nil
+		return price.AsUnpreciseFloat(), nil
 	}
 
 	return quote.Price, nil
@@ -63,13 +63,17 @@ func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ flo
 // LatestPrice gets the latest available ticker price.
 func (service *Service) LatestPrice(ctx context.Context) (_ time.Time, _ float64, err error) {
 	defer mon.Task()(&ctx)(&err)
-	return service.client.GetLatestPrice(ctx)
+	timestamp, price, err := service.client.GetLatestPrice(ctx)
+	if err != nil {
+		return time.Time{}, 0, ErrService.Wrap(err)
+	}
+	return timestamp, price.AsUnpreciseFloat(), ErrService.Wrap(err)
 }
 
 // SavePrice stores the token price for the given time window.
 func (service *Service) SavePrice(ctx context.Context, timestamp time.Time, price float64) (err error) {
 	defer mon.Task()(&ctx)(&err)
-	return service.db.Update(ctx, timestamp, price)
+	return ErrService.Wrap(service.db.Update(ctx, timestamp, price))
 }
 
 // Ping checks that the third-party api is available for use.

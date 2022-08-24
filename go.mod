@@ -9,13 +9,14 @@ require (
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/magefile/mage v1.13.0
 	github.com/miguelmota/go-ethereum-hdwallet v0.1.1
+	github.com/shopspring/decimal v1.2.0
 	github.com/spacemonkeygo/monkit/v3 v3.0.19
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
 	github.com/zeebo/errs v1.3.0
 	go.uber.org/zap v1.19.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	storj.io/common v0.0.0-20220802175255-aae0c09ec9d4
+	storj.io/common v0.0.0-20220829171748-14b0a3c9565e
 	storj.io/private v0.0.0-20220823161836-79135887c9be
 	storj.io/storj v1.45.3
 )

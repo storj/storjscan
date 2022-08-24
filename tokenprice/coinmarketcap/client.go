@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/zeebo/errs"
+
+	"storj.io/common/currency"
 )
 
 // ErrClient is an error class for coinmarketcap API client error.
@@ -52,14 +54,14 @@ func NewClient(config Config) *Client {
 
 // GetLatestPrice gets the latest available ticker price.
 // todo - verify fields in status, and add alerts.
-func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, float64, error) {
+func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount, error) {
 	q := url.Values{}
 	q.Add("id", storjID)
 	q.Add("convert", usdSymbol)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/cryptocurrency/quotes/latest", nil)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
 	req.Header.Set("Accepts", "application/json")
@@ -68,7 +70,7 @@ func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, float64, error)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
 	defer func() { err = errs.Combine(ErrClient.Wrap(err), resp.Body.Close()) }()
@@ -76,26 +78,28 @@ func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, float64, error)
 	var formattedResp quoteLatestResponse
 
 	if err = json.NewDecoder(resp.Body).Decode(&formattedResp); err != nil {
-		return time.Time{}, 0, ErrClient.New("error decoding response body: %s. server returned status code: %d", err, resp.StatusCode)
+		return time.Time{}, currency.Amount{}, ErrClient.New("error decoding response body: %s. server returned status code: %d", err, resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		if formattedResp.Status.ErrorMessage != "" {
-			return time.Time{}, 0, ErrClient.New("server returned error code: %d - %s", formattedResp.Status.ErrorCode, formattedResp.Status.ErrorMessage)
+			return time.Time{}, currency.Amount{}, ErrClient.New("server returned error code: %d - %s", formattedResp.Status.ErrorCode, formattedResp.Status.ErrorMessage)
 		}
-		return time.Time{}, 0, ErrClient.New("unexpected status code: %d", resp.StatusCode)
+		return time.Time{}, currency.Amount{}, ErrClient.New("unexpected status code: %d", resp.StatusCode)
 	}
 
 	timestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data[storjID].Quote[usdSymbol].LastUpdated)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
-	return timestamp, formattedResp.Data[storjID].Quote[usdSymbol].Price, nil
+
+	amount := currency.AmountFromDecimal(formattedResp.Data[storjID].Quote[usdSymbol].Price, currency.USDollarsMicro)
+	return timestamp, amount, nil
 }
 
 // GetPriceAt gets the ticker price at the specified time.
 // todo - verify fields in status, and add alerts.
-func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, float64, error) {
+func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, currency.Amount, error) {
 	q := url.Values{}
 	q.Add("id", storjID)
 	q.Add("convert", usdSymbol)
@@ -104,7 +108,7 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/cryptocurrency/quotes/historical", nil)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
 	req.Header.Set("Accepts", "application/json")
@@ -113,7 +117,7 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
 	defer func() { err = errs.Combine(ErrClient.Wrap(err), resp.Body.Close()) }()
@@ -121,21 +125,23 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 	var formattedResp quoteHistoricResponse
 
 	if err = json.NewDecoder(resp.Body).Decode(&formattedResp); err != nil {
-		return time.Time{}, 0, ErrClient.New("error decoding response body: %s. server returned status code: %d", err, resp.StatusCode)
+		return time.Time{}, currency.Amount{}, ErrClient.New("error decoding response body: %s. server returned status code: %d", err, resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		if formattedResp.Status.ErrorMessage != "" {
-			return time.Time{}, 0, ErrClient.New("server returned error code: %d - %s", formattedResp.Status.ErrorCode, formattedResp.Status.ErrorMessage)
+			return time.Time{}, currency.Amount{}, ErrClient.New("server returned error code: %d - %s", formattedResp.Status.ErrorCode, formattedResp.Status.ErrorMessage)
 		}
-		return time.Time{}, 0, ErrClient.New("unexpected status code: %d", resp.StatusCode)
+		return time.Time{}, currency.Amount{}, ErrClient.New("unexpected status code: %d", resp.StatusCode)
 	}
 
 	returnedTimestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Timestamp)
 	if err != nil {
-		return time.Time{}, 0, ErrClient.Wrap(err)
+		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
-	return returnedTimestamp, formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Price, nil
+
+	amount := currency.AmountFromDecimal(formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Price, currency.USDollarsMicro)
+	return returnedTimestamp, amount, nil
 }
 
 // Ping checks that the coinmarketcap third-party api is available for use.
@@ -171,13 +177,13 @@ func NewTestClient() *TestClient {
 }
 
 // GetLatestPrice gets the latest available ticker price.
-func (tc *TestClient) GetLatestPrice(ctx context.Context) (time.Time, float64, error) {
-	return time.Now(), 1, nil
+func (tc *TestClient) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount, error) {
+	return time.Now(), currency.AmountFromBaseUnits(1000000, currency.USDollarsMicro), nil
 }
 
 // GetPriceAt gets the ticker price at the specified time.
-func (tc *TestClient) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, float64, error) {
-	return requestedTimestamp, 1, nil
+func (tc *TestClient) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, currency.Amount, error) {
+	return requestedTimestamp, currency.AmountFromBaseUnits(1000000, currency.USDollarsMicro), nil
 }
 
 // Ping checks that the api is available for use.

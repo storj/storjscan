@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"storj.io/common/currency"
 	"storj.io/common/testcontext"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokenprice/coinmarketcaptest"
@@ -28,10 +29,12 @@ type errorResponse struct {
 func TestClientGetLatestPrice(t *testing.T) {
 	ctx := testcontext.New(t)
 	client := coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t))
+
 	time, price, err := client.GetLatestPrice(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, time)
-	require.NotNil(t, price)
+	require.True(t, price.BaseUnits() > 0)
+	require.Equal(t, currency.USDollarsMicro, price.Currency())
 }
 
 func TestClientGetLatestPriceBadUrl(t *testing.T) {
@@ -61,7 +64,8 @@ func TestClientGetPriceAt(t *testing.T) {
 	time, price, err := client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, time)
-	require.NotNil(t, price)
+	require.True(t, price.BaseUnits() > 0)
+	require.Equal(t, currency.USDollarsMicro, price.Currency())
 }
 
 func TestClientGetPriceAtBadUrl(t *testing.T) {
@@ -114,14 +118,16 @@ func getConfigBadKey(url string) coinmarketcap.Config {
 func Test_TestClient(t *testing.T) {
 	ctx := testcontext.New(t)
 	client := coinmarketcap.NewTestClient()
+	oneUsdMicro := currency.AmountFromBaseUnits(1000000, currency.USDollarsMicro)
+
 	ts, price, err := client.GetLatestPrice(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, ts)
-	require.Equal(t, float64(1), price)
+	require.Equal(t, oneUsdMicro, price)
 	ts, price, err = client.GetPriceAt(ctx, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, ts)
-	require.Equal(t, float64(1), price)
+	require.Equal(t, oneUsdMicro, price)
 }
 
 func TestPing(t *testing.T) {
