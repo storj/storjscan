@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"storj.io/common/currency"
 	"storj.io/common/testcontext"
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
@@ -105,16 +106,16 @@ func testPayments(t *testing.T, connStr string) {
 		// fill token price DB.
 		tokenPriceDB := db.TokenPrice()
 		firstBlock := network.Ethereum().BlockChain().GetBlockByNumber(1)
-		const price = 2
+		price := currency.AmountFromBaseUnits(2000000, currency.USDollarsMicro)
 
 		startTime := time.Unix(int64(firstBlock.Time()), 0).Add(-time.Minute)
 		for i := 0; i < 10; i++ {
 			window := startTime.Add(time.Duration(i) * time.Minute)
-			require.NoError(t, tokenPriceDB.Update(ctx, window, price))
+			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, nil, tokenPrice, 100)
 
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
@@ -122,9 +123,11 @@ func testPayments(t *testing.T, connStr string) {
 
 		for i, payment := range payments {
 			testPayment := testPayments[i]
+			a := currency.AmountFromBaseUnits(testPayment.Amount, currency.StorjToken)
+
 			require.Equal(t, testPayment.From.Address, payment.From)
-			require.Equal(t, testPayment.Amount, payment.TokenValue.Int64())
-			require.EqualValues(t, testPayment.Amount*price, payment.USDValue)
+			require.Equal(t, testPayment.Amount, payment.TokenValue.BaseUnits())
+			require.EqualValues(t, tokenprice.CalculateValue(a, price), payment.USDValue)
 			require.Equal(t, testPayment.Tx, payment.Transaction)
 		}
 	})
@@ -230,12 +233,12 @@ func testAllPayments(t *testing.T, connStr string) {
 		// fill token price DB.
 		tokenPriceDB := db.TokenPrice()
 		firstBlock := network.Ethereum().BlockChain().GetBlockByNumber(1)
-		const price = 2
+		price := currency.AmountFromBaseUnits(2000000, currency.USDollarsMicro)
 
 		startTime := time.Unix(int64(firstBlock.Time()), 0).Add(-time.Minute)
 		for i := 0; i < 10; i++ {
 			window := startTime.Add(time.Duration(i) * time.Minute)
-			require.NoError(t, tokenPriceDB.Update(ctx, window, price))
+			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
@@ -258,14 +261,19 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.Equal(t, latestBlockHeader, payments.LatestBlock)
 			require.Equal(t, 4, len(payments.Payments))
 
+			a1 := currency.AmountFromBaseUnits(testPayments[1].Amount, currency.StorjToken)
+			a2 := currency.AmountFromBaseUnits(testPayments[2].Amount, currency.StorjToken)
+			a4 := currency.AmountFromBaseUnits(testPayments[4].Amount, currency.StorjToken)
+			a5 := currency.AmountFromBaseUnits(testPayments[5].Amount, currency.StorjToken)
+
 			txEqual(t, testPayments[1], payments.Payments[0])
-			require.EqualValues(t, testPayments[1].Amount*price, payments.Payments[0].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a1, price), payments.Payments[0].USDValue)
 			txEqual(t, testPayments[2], payments.Payments[1])
-			require.EqualValues(t, testPayments[2].Amount*price, payments.Payments[1].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a2, price), payments.Payments[1].USDValue)
 			txEqual(t, testPayments[4], payments.Payments[2])
-			require.EqualValues(t, testPayments[4].Amount*price, payments.Payments[2].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a4, price), payments.Payments[2].USDValue)
 			txEqual(t, testPayments[5], payments.Payments[3])
-			require.EqualValues(t, testPayments[5].Amount*price, payments.Payments[3].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a5, price), payments.Payments[3].USDValue)
 
 		})
 		t.Run("eu1 with specified block", func(t *testing.T) {
@@ -276,13 +284,15 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.Equal(t, latestBlockHeader, payments.LatestBlock)
 			require.Equal(t, 2, len(payments.Payments))
 
+			a4 := currency.AmountFromBaseUnits(testPayments[4].Amount, currency.StorjToken)
+			a5 := currency.AmountFromBaseUnits(testPayments[5].Amount, currency.StorjToken)
+
 			txEqual(t, testPayments[4], payments.Payments[0])
-			require.EqualValues(t, testPayments[4].Amount*price, payments.Payments[0].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a4, price), payments.Payments[0].USDValue)
 			txEqual(t, testPayments[5], payments.Payments[1])
-			require.EqualValues(t, testPayments[5].Amount*price, payments.Payments[1].USDValue)
+			require.EqualValues(t, tokenprice.CalculateValue(a5, price), payments.Payments[1].USDValue)
 		})
 	})
-
 }
 
 func TestPing(t *testing.T) {
@@ -304,6 +314,6 @@ func txEqual(t *testing.T, s struct {
 }, payment tokens.Payment) {
 	require.Equal(t, s.From.Address, payment.From)
 	require.Equal(t, s.To.Address, payment.To)
-	require.Equal(t, s.Amount, payment.TokenValue.Int64())
+	require.Equal(t, s.Amount, payment.TokenValue)
 	require.Equal(t, s.Tx, payment.Transaction)
 }

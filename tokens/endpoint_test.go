@@ -171,7 +171,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			err = json.NewDecoder(resp.Body).Decode(&payments)
 			require.NoError(t, err)
 			require.Equal(t, accounts[0].Address, payments[0].From)
-			require.EqualValues(t, 1000000, payments[0].TokenValue.Int64())
+			require.EqualValues(t, 1000000, payments[0].TokenValue)
 			require.EqualValues(t, 1000000*price, payments[0].USDValue)
 			require.Equal(t, recpt.BlockHash, payments[0].BlockHash)
 			require.Equal(t, recpt.BlockNumber.Int64(), payments[0].BlockNumber)

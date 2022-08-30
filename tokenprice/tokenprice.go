@@ -5,17 +5,15 @@ package tokenprice
 
 import (
 	"context"
-	"math/big"
 	"time"
 
 	"storj.io/common/currency"
 )
 
 // CalculateValue calculates value from given token value and price.
-func CalculateValue(value *big.Int, price float64) float64 {
-	val := new(big.Float).Mul(new(big.Float).SetInt(value), big.NewFloat(price))
-	valF, _ := val.Float64()
-	return valF
+func CalculateValue(value, price currency.Amount) currency.Amount {
+	val := value.AsDecimal().Mul(price.AsDecimal())
+	return currency.AmountFromDecimal(val, price.Currency())
 }
 
 // Client is the interface used to query for STORJ token price.

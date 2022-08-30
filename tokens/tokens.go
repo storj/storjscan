@@ -4,11 +4,11 @@
 package tokens
 
 import (
-	"math/big"
 	"time"
 
 	"github.com/spacemonkeygo/monkit/v3"
 
+	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
 )
 
@@ -18,8 +18,8 @@ var mon = monkit.Package()
 type Payment struct {
 	From        blockchain.Address
 	To          blockchain.Address
-	TokenValue  *big.Int
-	USDValue    float64
+	TokenValue  currency.Amount
+	USDValue    currency.Amount
 	BlockHash   blockchain.Hash
 	BlockNumber int64
 	Transaction blockchain.Hash

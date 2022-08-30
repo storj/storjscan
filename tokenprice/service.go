@@ -36,30 +36,30 @@ func NewService(log *zap.Logger, db PriceQuoteDB, client Client, priceWindow tim
 }
 
 // PriceAt retrieves token price at a particular timestamp.
-func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ float64, err error) {
+func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ currency.Amount, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	quote, err := service.db.Before(ctx, timestamp)
 	if err != nil && !errors.Is(err, ErrNoQuotes) {
-		return 0, ErrService.Wrap(err)
+		return currency.Amount{}, ErrService.Wrap(err)
 	}
 
 	if timestamp.Sub(quote.Timestamp) > service.priceWindow {
 		priceTimestamp, price, err := service.client.GetPriceAt(ctx, timestamp.Truncate(time.Minute))
 		if err != nil {
-			return 0, ErrService.Wrap(err)
+			return currency.Amount{}, ErrService.Wrap(err)
 		}
 		if timestamp.Sub(priceTimestamp) > service.priceWindow {
-			return 0, ErrService.New("retrieved price does not meet requirements")
+			return currency.Amount{}, ErrService.New("retrieved price does not meet requirements")
 		}
 		err = service.db.Update(ctx, priceTimestamp.Truncate(time.Minute), price.BaseUnits())
 		if err != nil {
-			return price.AsUnpreciseFloat(), ErrService.Wrap(err)
+			return currency.Amount{}, ErrService.Wrap(err)
 		}
-		return price.AsUnpreciseFloat(), nil
+		return price, nil
 	}
 
-	return quote.Price.AsUnpreciseFloat(), nil
+	return quote.Price, nil
 }
 
 // LatestPrice gets the latest available ticker price.

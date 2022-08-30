@@ -4,17 +4,18 @@
 package tokenprice_test
 
 import (
-	"math/big"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"storj.io/common/currency"
 	"storj.io/storjscan/tokenprice"
 )
 
 func TestCalculateValue(t *testing.T) {
 	var (
-		tokenValue = big.NewInt(10000000)
+		tokenValue = currency.AmountFromBaseUnits(100000000, currency.StorjToken)
 
 		prices = []float64{
 			0.9,
@@ -23,17 +24,20 @@ func TestCalculateValue(t *testing.T) {
 			1.25,
 			2,
 		}
-		expected = []float64{
-			9000000,
-			10500000,
-			11000000,
-			12500000,
-			20000000,
+		values = []int64{
+			900000,
+			1050000,
+			1100000,
+			1250000,
+			2000000,
 		}
 	)
 
-	for i, price := range prices {
+	for i, pricef := range prices {
+		price := currency.AmountFromDecimal(decimal.NewFromFloat(pricef), currency.USDollarsMicro)
+		expected := currency.AmountFromBaseUnits(values[i], currency.USDollarsMicro)
+
 		value := tokenprice.CalculateValue(tokenValue, price)
-		require.Equal(t, expected[i], value)
+		require.Equal(t, expected, value)
 	}
 }

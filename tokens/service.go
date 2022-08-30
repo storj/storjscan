@@ -13,6 +13,7 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
+	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokens/erc20"
@@ -139,7 +140,6 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 
 	// query the rpc API in batches
 	for i := 0; i < len(allWallets); i += service.batchSize {
-
 		var addresses []blockchain.Address
 
 		for a := i; a-i < service.batchSize && a < len(allWallets); a++ {
@@ -199,12 +199,13 @@ func (service *Service) Ping(ctx context.Context) (err error) {
 	return err
 }
 
-func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time, price float64) Payment {
+func paymentFromEvent(event *erc20.ERC20Transfer, timestamp time.Time, price currency.Amount) Payment {
+	tokenValue := currency.AmountFromBaseUnits(event.Value.Int64(), currency.StorjToken)
 	return Payment{
 		From:        event.From,
 		To:          event.To,
-		TokenValue:  event.Value,
-		USDValue:    tokenprice.CalculateValue(event.Value, price),
+		TokenValue:  tokenValue,
+		USDValue:    tokenprice.CalculateValue(tokenValue, price),
 		BlockHash:   event.Raw.BlockHash,
 		BlockNumber: int64(event.Raw.BlockNumber),
 		Transaction: event.Raw.TxHash,
