@@ -33,3 +33,5 @@ storjscan.last
 test/
 
 .history/
+test-blockchain/TestToken.abi
+test-blockchain/TestToken.bin
