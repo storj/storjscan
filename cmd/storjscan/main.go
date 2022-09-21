@@ -99,7 +99,7 @@ func init() {
 }
 
 func main() {
-	process.ExecCustomDebug(rootCmd)
+	process.Exec(rootCmd)
 }
 
 func run(ctx context.Context, config runConfig) error {
