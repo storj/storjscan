@@ -196,7 +196,10 @@ func (app *App) Run(ctx context.Context) (err error) {
 
 // Close closes all the resources.
 func (app *App) Close() error {
-	return app.Servers.Close()
+	var errList errs.Group
+	errList.Add(app.Servers.Close())
+	errList.Add(app.Services.Close())
+	return errList.Err()
 }
 
 func getKeyBytes(keys []string) (map[string]string, error) {
