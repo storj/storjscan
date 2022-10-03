@@ -48,6 +48,7 @@ func (service *Service) Claim(ctx context.Context, satellite string) (_ blockcha
 	if err != nil {
 		return blockchain.Address{}, ErrWalletsService.Wrap(err)
 	}
+	service.log.Debug("new wallet claimed")
 	return wallet.Address, nil
 }
 
@@ -83,5 +84,6 @@ func (service *Service) Register(ctx context.Context, satellite string, addresse
 	var err error
 	defer mon.Task()(&ctx)(&err)
 	err = service.db.InsertBatch(ctx, satellite, addresses)
+	service.log.Debug("new wallets added to DB", zap.String("satellite", satellite), zap.Int("number of new wallets", len(addresses)))
 	return ErrWalletsService.Wrap(err)
 }

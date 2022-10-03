@@ -122,6 +122,7 @@ func (server *Server) authorize(next http.Handler) http.Handler {
 
 		identity, found := server.verifyAPIKey(id, secret)
 		if !found {
+			server.log.Debug("unauthorized request. invalid api key provided")
 			ServeJSONError(server.log, w, http.StatusUnauthorized, Error.New("invalid api key provided"))
 			return
 		}

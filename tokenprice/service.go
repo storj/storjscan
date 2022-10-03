@@ -38,6 +38,7 @@ func NewService(log *zap.Logger, db PriceQuoteDB, client Client, priceWindow tim
 // PriceAt retrieves token price at a particular timestamp.
 func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ currency.Amount, err error) {
 	defer mon.Task()(&ctx)(&err)
+	service.log.Debug("retrieving price at", zap.String("timestamp", timestamp.String()))
 
 	quote, err := service.db.Before(ctx, timestamp)
 	if err != nil && !errors.Is(err, ErrNoQuotes) {
@@ -65,6 +66,7 @@ func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ cur
 // LatestPrice gets the latest available ticker price.
 func (service *Service) LatestPrice(ctx context.Context) (_ time.Time, _ currency.Amount, err error) {
 	defer mon.Task()(&ctx)(&err)
+	service.log.Debug("retrieving latest price")
 	timestamp, price, err := service.client.GetLatestPrice(ctx)
 	return timestamp, price, ErrService.Wrap(err)
 }

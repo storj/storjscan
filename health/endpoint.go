@@ -71,6 +71,7 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 		endpoint.log.Error(fmt.Sprintf("db failure: %s", err.Error()))
 	} else {
 		message += "db:ok\n"
+		endpoint.log.Debug("DB is ready")
 	}
 
 	// test token price service
@@ -85,6 +86,7 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		message += "tokenprice:ok\n"
+		endpoint.log.Debug("tokenprice is ready")
 	}
 
 	// test blockchain service
@@ -94,6 +96,7 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 		endpoint.log.Error(fmt.Sprintf("blockchain failure: %s\n", err.Error()))
 	} else {
 		message += "blockchain:ok\n"
+		endpoint.log.Debug("blockchain is ready")
 	}
 
 	w.Header().Set("Content-Type", "text/plain")

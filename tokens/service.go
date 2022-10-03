@@ -65,6 +65,7 @@ func NewService(
 // Payments retrieves all ERC20 token payments starting from particular block for ethereum address.
 func (service *Service) Payments(ctx context.Context, address blockchain.Address, from int64) (_ []Payment, err error) {
 	defer mon.Task()(&ctx)(&err)
+	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
 	if err != nil {
@@ -100,7 +101,12 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 		}
 
 		payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
-
+		service.log.Debug("found payment",
+			zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
+			zap.Int64("Block Number", payments[len(payments)-1].BlockNumber),
+			zap.Int("Log Index", payments[len(payments)-1].LogIndex),
+			zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
+		)
 	}
 
 	return payments, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
@@ -109,6 +115,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 // AllPayments returns all the payments associated with the current satellite.
 func (service *Service) AllPayments(ctx context.Context, satelliteID string, from int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
+	service.log.Debug("payments request received for satellite", zap.String("satelliteID", satelliteID))
 
 	if satelliteID == "" {
 		// it shouldn't be possible if auth is properly set up
@@ -167,6 +174,12 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 			}
 
 			allPayments = append(allPayments, paymentFromEvent(iter.Event, header.Timestamp, price))
+			service.log.Debug("found payment",
+				zap.String("Transaction Hash", allPayments[len(allPayments)-1].Transaction.String()),
+				zap.Int64("Block Number", allPayments[len(allPayments)-1].BlockNumber),
+				zap.Int("Log Index", allPayments[len(allPayments)-1].LogIndex),
+				zap.String("USD Value", allPayments[len(allPayments)-1].USDValue.AsDecimal().String()),
+			)
 		}
 
 		if err := errs.Combine(iter.Error(), iter.Close()); err != nil {
