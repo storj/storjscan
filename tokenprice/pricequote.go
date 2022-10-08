@@ -35,4 +35,7 @@ type PriceQuoteDB interface {
 
 	// Before gets the first token price with timestamp before provided timestamp.
 	Before(ctx context.Context, before time.Time) (PriceQuote, error)
+
+	// DeleteBefore deletes token prices before the given time.
+	DeleteBefore(ctx context.Context, before time.Time) (err error)
 }

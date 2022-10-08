@@ -30,7 +30,7 @@ type priceQuoteDB struct {
 // Update updates the stored token price for the given time window, or creates a new entry if it does not exist.
 func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, price int64) (err error) {
 	defer mon.Task()(&ctx)(&err)
-	err = priceQuoteDB.db.ReplaceNoReturn_TokenPrice(ctx, dbx.TokenPrice_IntervalStart(window), dbx.TokenPrice_Price(price))
+	err = priceQuoteDB.db.ReplaceNoReturn_TokenPrice(ctx, dbx.TokenPrice_IntervalStart(window.UTC()), dbx.TokenPrice_Price(price))
 	return ErrPriceQuoteDB.Wrap(err)
 }
 
@@ -38,7 +38,7 @@ func (priceQuoteDB *priceQuoteDB) Update(ctx context.Context, window time.Time, 
 func (priceQuoteDB priceQuoteDB) Before(ctx context.Context, before time.Time) (_ tokenprice.PriceQuote, err error) {
 	defer mon.Task()(&ctx)(&err)
 	rows, err := priceQuoteDB.db.First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx,
-		dbx.TokenPrice_IntervalStart(before))
+		dbx.TokenPrice_IntervalStart(before.UTC()))
 	if err != nil {
 		return tokenprice.PriceQuote{}, ErrPriceQuoteDB.Wrap(err)
 	}
@@ -46,7 +46,14 @@ func (priceQuoteDB priceQuoteDB) Before(ctx context.Context, before time.Time) (
 		return tokenprice.PriceQuote{}, tokenprice.ErrNoQuotes
 	}
 	return tokenprice.PriceQuote{
-		Timestamp: rows.IntervalStart,
+		Timestamp: rows.IntervalStart.UTC(),
 		Price:     currency.AmountFromBaseUnits(rows.Price, currency.USDollarsMicro),
 	}, nil
+}
+
+// DeleteBefore deletes token prices before the given time.
+func (priceQuoteDB priceQuoteDB) DeleteBefore(ctx context.Context, before time.Time) (err error) {
+	defer mon.Task()(&ctx)(&err)
+	_, err = priceQuoteDB.db.Delete_TokenPrice_By_IntervalStart_Less(ctx, dbx.TokenPrice_IntervalStart(before.UTC()))
+	return ErrPriceQuoteDB.Wrap(err)
 }

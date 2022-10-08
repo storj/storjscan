@@ -17,8 +17,10 @@ import (
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
+	headerCleanup "storj.io/storjscan/blockchain/cleanup"
 	"storj.io/storjscan/health"
 	"storj.io/storjscan/tokenprice"
+	tokenPriceCleanup "storj.io/storjscan/tokenprice/cleanup"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
 	"storj.io/storjscan/tokens"
 	"storj.io/storjscan/wallets"
@@ -28,10 +30,12 @@ var mon = monkit.Package()
 
 // Config wraps storjscan configuration.
 type Config struct {
-	Debug      debug.Config
-	Tokens     tokens.Config
-	TokenPrice tokenprice.Config
-	API        api.Config
+	Debug             debug.Config
+	Tokens            tokens.Config
+	TokenPrice        tokenprice.Config
+	TokenPriceCleanup tokenPriceCleanup.Config
+	HeaderCleanup     headerCleanup.Config
+	API               api.Config
 }
 
 // DB is a collection of storjscan databases.
@@ -62,6 +66,7 @@ type App struct {
 
 	Blockchain struct {
 		HeadersCache *blockchain.HeadersCache
+		CleanupChore *headerCleanup.Chore
 	}
 
 	Tokens struct {
@@ -70,8 +75,9 @@ type App struct {
 	}
 
 	TokenPrice struct {
-		Chore   *tokenprice.Chore
-		Service *tokenprice.Service
+		Chore        *tokenprice.Chore
+		CleanupChore *tokenPriceCleanup.Chore
+		Service      *tokenprice.Service
 	}
 
 	API struct {

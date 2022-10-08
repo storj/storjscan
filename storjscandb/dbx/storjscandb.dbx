@@ -9,6 +9,7 @@ model block_header (
 
 create block_header ( )
 delete block_header ( where block_header.hash = ? )
+delete block_header ( where block_header.timestamp < ? )
 
 read all (
 	select block_header
@@ -37,7 +38,7 @@ create token_price (
 	replace
 )
 
-delete token_price ( where token_price.interval_start = ? )
+delete token_price ( where token_price.interval_start < ? )
 
 read one (
 	select token_price

@@ -1750,30 +1750,57 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 
 }
 
-func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
-	token_price_interval_start TokenPrice_IntervalStart_Field) (
-	deleted bool, err error) {
+func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
+	block_header_timestamp_less BlockHeader_Timestamp_Field) (
+	count int64, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start = ?")
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
 	var __values []interface{}
-	__values = append(__values, token_price_interval_start.value())
+	__values = append(__values, block_header_timestamp_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
 	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
 	if err != nil {
-		return false, obj.makeErr(err)
+		return 0, obj.makeErr(err)
 	}
 
-	__count, err := __res.RowsAffected()
+	count, err = __res.RowsAffected()
 	if err != nil {
-		return false, obj.makeErr(err)
+		return 0, obj.makeErr(err)
 	}
 
-	return __count > 0, nil
+	return count, nil
+
+}
+
+func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
+	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
+
+	var __values []interface{}
+	__values = append(__values, token_price_interval_start_less.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
 
 }
 
@@ -2354,30 +2381,57 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 
 }
 
-func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
-	token_price_interval_start TokenPrice_IntervalStart_Field) (
-	deleted bool, err error) {
+func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
+	block_header_timestamp_less BlockHeader_Timestamp_Field) (
+	count int64, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start = ?")
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
 	var __values []interface{}
-	__values = append(__values, token_price_interval_start.value())
+	__values = append(__values, block_header_timestamp_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
 	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
 	if err != nil {
-		return false, obj.makeErr(err)
+		return 0, obj.makeErr(err)
 	}
 
-	__count, err := __res.RowsAffected()
+	count, err = __res.RowsAffected()
 	if err != nil {
-		return false, obj.makeErr(err)
+		return 0, obj.makeErr(err)
 	}
 
-	return __count > 0, nil
+	return count, nil
+
+}
+
+func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
+	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
+
+	var __values []interface{}
+	__values = append(__values, token_price_interval_start_less.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
 
 }
 
@@ -2554,14 +2608,26 @@ func (rx *Rx) Delete_BlockHeader_By_Hash(ctx context.Context,
 	return tx.Delete_BlockHeader_By_Hash(ctx, block_header_hash)
 }
 
-func (rx *Rx) Delete_TokenPrice_By_IntervalStart(ctx context.Context,
-	token_price_interval_start TokenPrice_IntervalStart_Field) (
-	deleted bool, err error) {
+func (rx *Rx) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
+	block_header_timestamp_less BlockHeader_Timestamp_Field) (
+	count int64, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Delete_TokenPrice_By_IntervalStart(ctx, token_price_interval_start)
+	return tx.Delete_BlockHeader_By_Timestamp_Less(ctx, block_header_timestamp_less)
+
+}
+
+func (rx *Rx) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
+	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
+	count int64, err error) {
+	var tx *Tx
+	if tx, err = rx.getTx(ctx); err != nil {
+		return
+	}
+	return tx.Delete_TokenPrice_By_IntervalStart_Less(ctx, token_price_interval_start_less)
+
 }
 
 func (rx *Rx) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
@@ -2682,9 +2748,13 @@ type Methods interface {
 		block_header_hash BlockHeader_Hash_Field) (
 		deleted bool, err error)
 
-	Delete_TokenPrice_By_IntervalStart(ctx context.Context,
-		token_price_interval_start TokenPrice_IntervalStart_Field) (
-		deleted bool, err error)
+	Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
+		block_header_timestamp_less BlockHeader_Timestamp_Field) (
+		count int64, err error)
+
+	Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
+		token_price_interval_start_less TokenPrice_IntervalStart_Field) (
+		count int64, err error)
 
 	First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 		token_price_interval_start_less TokenPrice_IntervalStart_Field) (

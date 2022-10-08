@@ -49,6 +49,12 @@ func (headers *headersDB) Delete(ctx context.Context, hash blockchain.Hash) erro
 	return nil
 }
 
+// DeleteBefore deletes headers before the given time.
+func (headers *headersDB) DeleteBefore(ctx context.Context, before time.Time) (err error) {
+	_, err = headers.db.Delete_BlockHeader_By_Timestamp_Less(ctx, dbx.BlockHeader_Timestamp(before.UTC()))
+	return ErrHeadersDB.Wrap(err)
+}
+
 // Get retrieves single block header from the db by block hash.
 func (headers *headersDB) Get(ctx context.Context, hash blockchain.Hash) (blockchain.Header, error) {
 	dbxHeader, err := headers.db.Get_BlockHeader_By_Hash(ctx, dbx.BlockHeader_Hash(hash.Bytes()))

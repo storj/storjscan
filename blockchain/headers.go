@@ -33,6 +33,8 @@ type HeadersDB interface {
 	Insert(ctx context.Context, hash Hash, number int64, timestamp time.Time) error
 	// Delete deletes header from db by hash.
 	Delete(ctx context.Context, hash Hash) error
+	// DeleteBefore deletes headers before the given time.
+	DeleteBefore(ctx context.Context, before time.Time) (err error)
 	// Get retrieves header by hash.
 	Get(ctx context.Context, hash Hash) (Header, error)
 	// GetByNumber retrieves header by number.
