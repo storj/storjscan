@@ -5,12 +5,16 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip39"
 	"github.com/zeebo/errs"
@@ -47,20 +51,29 @@ var (
 		},
 	}
 
-	generateCfg wallets.GenerateConfig
+	generateCfg struct {
+		MnemonicFile string `help:"File which contains the mnemonic to be used for HD generation." default:".mnemonic"`
+		OutputFile   string `help:"File to write CSV output to. If unset, uses stdout."`
+		Min          int    `help:"Index of the first derived address." default:"0"`
+		Max          int    `help:"Index of the last derived address." default:"1000"`
+		KeysName     string `help:"Name of the hd chain/mnemonic which was used/" default:"default"`
+	}
 	generateCmd = &cobra.Command{
 		Use:   "generate",
-		Short: "Generated deterministic wallet addresses and register them to the db",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, _ := process.Ctx(cmd)
+		Short: "Generated deterministic wallet addresses and output them to a CSV",
+		RunE:  generate,
+	}
 
-			mnemonic, err := ioutil.ReadFile(generateCfg.MnemonicFile)
-			if err != nil {
-				return errs.New("Couldn't read mnemonic from %s: %v", generateCfg.MnemonicFile, err)
-			}
-
-			return wallets.Generate(ctx, generateCfg, strings.TrimSpace(string(mnemonic)))
-		},
+	importCfg struct {
+		Address   string `help:"public address to connect to" default:"http://127.0.0.1:12000"`
+		APIKey    string `help:"Secrets to connect to service endpoints."`
+		APISecret string `help:"Secrets to connect to service endpoints."`
+		InputFile string `help:"CSV input path"`
+	}
+	importCmd = &cobra.Command{
+		Use:   "import",
+		Short: "Read generated wallet addresses and register them with the db",
+		RunE:  importCSV,
 	}
 
 	mnemonicCmd = &cobra.Command{
@@ -97,6 +110,9 @@ func init() {
 
 	rootCmd.AddCommand(generateCmd)
 	process.Bind(generateCmd, &generateCfg, defaults)
+
+	rootCmd.AddCommand(importCmd)
+	process.Bind(importCmd, &importCfg, defaults)
 
 	rootCmd.AddCommand(mnemonicCmd)
 
@@ -173,4 +189,86 @@ func migrate(ctx context.Context, config runConfig) (err error) {
 
 	err = db.MigrateToLatest(ctx)
 	return err
+}
+
+func generate(cmd *cobra.Command, args []string) (err error) {
+	ctx, _ := process.Ctx(cmd)
+	mnemonic, err := ioutil.ReadFile(generateCfg.MnemonicFile)
+	if err != nil {
+		return errs.New("Couldn't read mnemonic from %s: %v", generateCfg.MnemonicFile, err)
+	}
+
+	addresses, err := wallets.Generate(ctx, generateCfg.KeysName, generateCfg.Min, generateCfg.Max, strings.TrimSpace(string(mnemonic)))
+	if err != nil {
+		return err
+	}
+
+	var out io.Writer = os.Stdout
+	if generateCfg.OutputFile != "" {
+		fh, err := os.Create(generateCfg.OutputFile)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			closeErr := fh.Close()
+			err = errs.Combine(err, errs.Wrap(closeErr))
+		}()
+		out = fh
+	}
+
+	w := csv.NewWriter(out)
+	err = w.Write([]string{"address", "info"})
+	if err != nil {
+		return errs.Wrap(err)
+	}
+
+	for addr, info := range addresses {
+		err = w.Write([]string{addr.String(), info})
+		if err != nil {
+			return errs.Wrap(err)
+		}
+	}
+
+	w.Flush()
+	return errs.Wrap(w.Error())
+}
+
+func safeHexToAddress(s string) (common.Address, error) {
+	if !common.IsHexAddress(s) {
+		return common.Address{}, errs.New("malformed hex address: %q", s)
+	}
+	return common.HexToAddress(s), nil
+}
+
+func importCSV(cmd *cobra.Command, args []string) (err error) {
+	ctx, _ := process.Ctx(cmd)
+
+	fh, err := os.Open(importCfg.InputFile)
+	if err != nil {
+		return errs.Wrap(err)
+	}
+	defer func() {
+		err = errs.Combine(err, fh.Close())
+	}()
+
+	records, err := csv.NewReader(fh).ReadAll()
+	if err != nil {
+		return errs.Wrap(err)
+	}
+	if len(records) < 1 || len(records[0]) != 2 || records[0][0] != "address" || records[0][1] != "info" {
+		return errs.New("malformed csv")
+	}
+
+	addresses := map[common.Address]string{}
+	for _, record := range records[1:] {
+		address, err := safeHexToAddress(record[0])
+		if err != nil {
+			return err
+		}
+
+		addresses[address] = record[1]
+	}
+
+	client := wallets.NewClient(importCfg.Address, importCfg.APIKey, importCfg.APISecret)
+	return client.AddWallets(ctx, addresses)
 }

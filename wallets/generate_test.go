@@ -47,22 +47,16 @@ func TestGenerate(t *testing.T) {
 		// generate first time
 		mnemonic := "leader pause fashion picnic green elder rebuild health valley alert cactus latin skull antique arrest skirt health chaos student will north garbage wagon before"
 
-		err = wallets.Generate(ctx, wallets.GenerateConfig{
-			Min:       0,
-			Max:       5,
-			Address:   "http://" + lis.Addr().String(),
-			APIKey:    "eu1",
-			APISecret: "secret",
-		}, mnemonic)
+		addresses1, err := wallets.Generate(ctx, "defaultkey", 0, 5, mnemonic)
+		require.NoError(t, err)
+		client1 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
+		err = client1.AddWallets(ctx, addresses1)
 		require.NoError(t, err)
 
-		err = wallets.Generate(ctx, wallets.GenerateConfig{
-			Min:       0,
-			Max:       10,
-			Address:   "http://" + lis.Addr().String(),
-			APIKey:    "eu1",
-			APISecret: "secret",
-		}, mnemonic)
+		addresses2, err := wallets.Generate(ctx, "defaultkey", 0, 10, mnemonic)
+		require.NoError(t, err)
+		client2 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
+		err = client2.AddWallets(ctx, addresses2)
 		require.NoError(t, err)
 
 		// claim all of them

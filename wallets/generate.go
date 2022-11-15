@@ -16,23 +16,6 @@ import (
 	"github.com/zeebo/errs"
 )
 
-// GenerateConfig for wallet address generation.
-type GenerateConfig struct {
-	Address      string `help:"public address to listen on" default:"http://127.0.0.1:12000"`
-	APIKey       string `help:"Secrets to connect to service endpoints."`
-	APISecret    string `help:"Secrets to connect to service endpoints."`
-	MnemonicFile string `help:"File which contains the mnemonic to be used for HD generation." default:".mnemonic"`
-	Min          int    `help:"Index of the first derived address." default:"0"`
-	Max          int    `help:"Index of the last derived address." default:"1000"`
-	KeysName     string `help:"Name of the hd chain/mnemonic which was used/" default:"default"`
-}
-
-// Generate creates and registers new HD wallet addresses.
-func Generate(ctx context.Context, config GenerateConfig, mnemonic string) error {
-	client := NewClient(config.Address, config.APIKey, config.APISecret)
-	return generateWithPersistFunc(ctx, config, mnemonic, client.AddWallets)
-}
-
 func derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (accounts.Account, error) {
 	var err error
 	key := masterKey
@@ -65,39 +48,39 @@ func derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (ac
 	}, nil
 }
 
-func generateWithPersistFunc(ctx context.Context, config GenerateConfig, mnemonic string, persist func(context.Context, map[common.Address]string) error) error {
-
+// Generate creates new HD wallet addresses.
+func Generate(ctx context.Context, keysname string, min, max int, mnemonic string) (map[common.Address]string, error) {
 	addr := make(map[common.Address]string)
 
 	if mnemonic == "" {
-		return errs.New("mnemonic is required")
+		return nil, errs.New("mnemonic is required")
 	}
 
 	seed, err := bip39.NewSeedWithErrorChecking(mnemonic, "")
 	if err != nil {
-		return errs.Wrap(err)
+		return nil, errs.Wrap(err)
 	}
 	if len(seed) == 0 {
-		return errs.New("unexpectedly empty seed")
+		return nil, errs.New("unexpectedly empty seed")
 	}
 
 	masterKey, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
 	if err != nil {
-		return errs.Wrap(err)
+		return nil, errs.Wrap(err)
 	}
 
 	next := accounts.DefaultIterator(accounts.DefaultBaseDerivationPath)
 
-	for i := 0; i <= config.Max; i++ {
+	for i := 0; i <= max; i++ {
 		path := next()
-		if i < config.Min {
+		if i < min {
 			continue
 		}
 		account, err := derive(masterKey, path)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		addr[account.Address] = config.KeysName + " " + path.String()
+		addr[account.Address] = keysname + " " + path.String()
 	}
-	return persist(ctx, addr)
+	return addr, nil
 }
