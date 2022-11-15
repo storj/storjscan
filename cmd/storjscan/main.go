@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	mm "github.com/miguelmota/go-ethereum-hdwallet"
 	"github.com/spf13/cobra"
+	"github.com/tyler-smith/go-bip39"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
@@ -67,7 +67,11 @@ var (
 		Use:   "mnemonic",
 		Short: "Print out a random mnemonic to be used.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := mm.NewMnemonic(256)
+			entropy, err := bip39.NewEntropy(256)
+			if err != nil {
+				return errs.Wrap(err)
+			}
+			m, err := bip39.NewMnemonic(entropy)
 			if err != nil {
 				return errs.Wrap(err)
 			}

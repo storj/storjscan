@@ -5,11 +5,15 @@ package wallets_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 	"testing"
 
-	acc "github.com/ethereum/go-ethereum/accounts"
-	mm "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap/zaptest"
@@ -102,28 +106,25 @@ func TestService(t *testing.T) {
 }
 
 func generateTestAddresses(ctx context.Context, service *wallets.Service, count int) error {
-	seed, err := mm.NewSeed()
+	seed := make([]byte, 64)
+	_, err := rand.Read(seed)
 	if err != nil {
 		return err
 	}
 
-	w, err := mm.NewFromSeed(seed)
+	masterKey, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
 	if err != nil {
 		return err
 	}
 
 	var entries = make(map[blockchain.Address]string)
-	next := acc.DefaultIterator(mm.DefaultBaseDerivationPath)
+	next := accounts.DefaultIterator(accounts.DefaultBaseDerivationPath)
 	for i := 0; i < count; i++ {
-		account, err := w.Derive(next(), false)
+		account, err := derive(masterKey, next())
 		if err != nil {
-			continue
+			return err
 		}
-		address, err := w.Address(account)
-		if err != nil {
-			continue
-		}
-		entries[address] = "test-info"
+		entries[account.Address] = "test-info"
 	}
 
 	if len(entries) < 1 {
@@ -132,4 +133,36 @@ func generateTestAddresses(ctx context.Context, service *wallets.Service, count 
 
 	err = service.Register(ctx, "test-satellite", entries)
 	return err
+}
+
+func derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (accounts.Account, error) {
+	var err error
+	key := masterKey
+	for _, n := range path {
+		key, err = key.Derive(n)
+		if err != nil {
+			return accounts.Account{}, errs.Wrap(err)
+		}
+	}
+
+	privateKey, err := key.ECPrivKey()
+	if err != nil {
+		return accounts.Account{}, errs.Wrap(err)
+	}
+	privateKeyECDSA := privateKey.ToECDSA()
+	publicKey := privateKeyECDSA.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return accounts.Account{}, errs.New("failed to get public key")
+	}
+
+	address := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	return accounts.Account{
+		Address: address,
+		URL: accounts.URL{
+			Scheme: "",
+			Path:   path.String(),
+		},
+	}, nil
 }

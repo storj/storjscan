@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	mm "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/stretchr/testify/require"
+	"github.com/tyler-smith/go-bip39"
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
@@ -73,18 +76,18 @@ func TestGenerate(t *testing.T) {
 		require.NoError(t, err)
 
 		// re-derive all the keys based on the info
-		seed, err := mm.NewSeedFromMnemonic(mnemonic)
+		seed, err := bip39.NewSeedWithErrorChecking(mnemonic, "")
 		require.NoError(t, err)
-		w, err := mm.NewFromSeed(seed)
+		masterKey, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
 		require.NoError(t, err)
 
 		for a, i := range addressses {
 			parts := strings.Split(i, " ")
 			require.Len(t, parts, 2)
 
-			dp, err := mm.ParseDerivationPath(parts[1])
+			dp, err := accounts.ParseDerivationPath(parts[1])
 			require.NoError(t, err)
-			derived, err := w.Derive(dp, false)
+			derived, err := derive(masterKey, dp)
 			require.NoError(t, err)
 
 			require.Equal(t, derived.Address, a)

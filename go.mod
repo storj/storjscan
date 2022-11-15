@@ -3,16 +3,18 @@ module storj.io/storjscan
 go 1.17
 
 require (
+	github.com/btcsuite/btcd v0.21.0-beta
+	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/ethereum/go-ethereum v1.10.16
 	github.com/gorilla/mux v1.8.0
 	github.com/jackc/pgconn v1.11.0
 	github.com/jackc/pgx/v4 v4.15.0
 	github.com/magefile/mage v1.13.0
-	github.com/miguelmota/go-ethereum-hdwallet v0.1.1
 	github.com/shopspring/decimal v1.2.0
 	github.com/spacemonkeygo/monkit/v3 v3.0.19
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
+	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
 	github.com/zeebo/errs v1.3.0
 	go.uber.org/zap v1.19.1
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -24,10 +26,9 @@ require (
 require (
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/VictoriaMetrics/fastcache v1.6.0 // indirect
+	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/apache/thrift v0.12.0 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/btcsuite/btcd v0.21.0-beta // indirect
-	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce // indirect
 	github.com/calebcase/tmpfile v1.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -90,7 +91,6 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef // indirect
 	github.com/zeebo/admission/v3 v3.0.3 // indirect
 	github.com/zeebo/blake3 v0.2.3 // indirect
 	github.com/zeebo/float16 v0.1.0 // indirect
