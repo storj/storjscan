@@ -101,6 +101,9 @@ type runConfig struct {
 }
 
 func init() {
+	var confDir string
+	cfgstruct.SetupFlag(zap.L(), rootCmd, &confDir, "config-dir", ".", "directory to look for configuration in")
+
 	defaults := cfgstruct.DefaultsFlag(rootCmd)
 	rootCmd.AddCommand(runCmd)
 	process.Bind(runCmd, &runCfg, defaults)
