@@ -10,7 +10,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/otel"
+	"os"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1227,7 +1230,12 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 	block_header_number BlockHeader_Number_Field,
 	block_header_timestamp BlockHeader_Timestamp_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__hash_val := block_header_hash.value()
 	__number_val := block_header_number.value()
 	__timestamp_val := block_header_timestamp.value()
@@ -1257,7 +1265,12 @@ func (obj *pgxImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
 	token_price_price TokenPrice_Price_Field) (
 	err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__interval_start_val := token_price_interval_start.value()
 	__price_val := token_price_price.value()
 
@@ -1282,7 +1295,12 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
 	__satellite_val := wallet_satellite.value()
@@ -1311,7 +1329,12 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 
 func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	rows []*BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers ORDER BY block_headers.timestamp DESC")
 
@@ -1355,7 +1378,12 @@ func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) 
 func (obj *pgxImpl) Get_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.hash = ?")
 
@@ -1377,7 +1405,12 @@ func (obj *pgxImpl) Get_BlockHeader_By_Hash(ctx context.Context,
 func (obj *pgxImpl) Get_BlockHeader_By_Number(ctx context.Context,
 	block_header_number BlockHeader_Number_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.number = ? LIMIT 2")
 
@@ -1435,7 +1468,12 @@ func (obj *pgxImpl) Get_BlockHeader_By_Number(ctx context.Context,
 func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start = ?")
 
@@ -1457,7 +1495,12 @@ func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start < ? ORDER BY token_prices.interval_start DESC LIMIT 1 OFFSET 0")
 
@@ -1505,7 +1548,12 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet_address Wallet_Address_Field,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ?")
 
@@ -1527,7 +1575,12 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
@@ -1573,7 +1626,12 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Co
 
 func (obj *pgxImpl) Count_Wallet_Address(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets")
 
@@ -1593,7 +1651,12 @@ func (obj *pgxImpl) Count_Wallet_Address(ctx context.Context) (
 
 func (obj *pgxImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is not NULL")
 
@@ -1613,7 +1676,12 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 
 func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is NULL")
 
@@ -1634,7 +1702,12 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
@@ -1681,7 +1754,12 @@ func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	var __sets = &__sqlbundle_Hole{}
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? AND wallets.satellite = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
@@ -1726,7 +1804,12 @@ func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 func (obj *pgxImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.hash = ?")
 
@@ -1753,7 +1836,12 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 	block_header_timestamp_less BlockHeader_Timestamp_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
@@ -1780,7 +1868,12 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
 
@@ -1815,7 +1908,12 @@ func (impl pgxImpl) isConstraintError(err error) (
 }
 
 func (obj *pgxImpl) deleteAll(ctx context.Context) (count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	var __res sql.Result
 	var __count int64
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM wallets;")
@@ -1858,7 +1956,12 @@ func (obj *pgxcockroachImpl) Create_BlockHeader(ctx context.Context,
 	block_header_number BlockHeader_Number_Field,
 	block_header_timestamp BlockHeader_Timestamp_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__hash_val := block_header_hash.value()
 	__number_val := block_header_number.value()
 	__timestamp_val := block_header_timestamp.value()
@@ -1888,7 +1991,12 @@ func (obj *pgxcockroachImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
 	token_price_price TokenPrice_Price_Field) (
 	err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__interval_start_val := token_price_interval_start.value()
 	__price_val := token_price_price.value()
 
@@ -1913,7 +2021,12 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
 	__satellite_val := wallet_satellite.value()
@@ -1942,7 +2055,12 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 
 func (obj *pgxcockroachImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	rows []*BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers ORDER BY block_headers.timestamp DESC")
 
@@ -1986,7 +2104,12 @@ func (obj *pgxcockroachImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.
 func (obj *pgxcockroachImpl) Get_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.hash = ?")
 
@@ -2008,7 +2131,12 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_Hash(ctx context.Context,
 func (obj *pgxcockroachImpl) Get_BlockHeader_By_Number(ctx context.Context,
 	block_header_number BlockHeader_Number_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.number = ? LIMIT 2")
 
@@ -2066,7 +2194,12 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_Number(ctx context.Context,
 func (obj *pgxcockroachImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start = ?")
 
@@ -2088,7 +2221,12 @@ func (obj *pgxcockroachImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context
 func (obj *pgxcockroachImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start < ? ORDER BY token_prices.interval_start DESC LIMIT 1 OFFSET 0")
 
@@ -2136,7 +2274,12 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 	wallet_address Wallet_Address_Field,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ?")
 
@@ -2158,7 +2301,12 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
@@ -2204,7 +2352,12 @@ func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx c
 
 func (obj *pgxcockroachImpl) Count_Wallet_Address(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets")
 
@@ -2224,7 +2377,12 @@ func (obj *pgxcockroachImpl) Count_Wallet_Address(ctx context.Context) (
 
 func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is not NULL")
 
@@ -2244,7 +2402,12 @@ func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Cont
 
 func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is NULL")
 
@@ -2265,7 +2428,12 @@ func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context
 func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
@@ -2312,7 +2480,12 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Address_And_Satellite(ctx context.
 	wallet_satellite Wallet_Satellite_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	var __sets = &__sqlbundle_Hole{}
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? AND wallets.satellite = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
@@ -2357,7 +2530,12 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Address_And_Satellite(ctx context.
 func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.hash = ?")
 
@@ -2384,7 +2562,12 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Hash(ctx context.Context,
 func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 	block_header_timestamp_less BlockHeader_Timestamp_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
@@ -2411,7 +2594,12 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Co
 func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
 
@@ -2446,7 +2634,12 @@ func (impl pgxcockroachImpl) isConstraintError(err error) (
 }
 
 func (obj *pgxcockroachImpl) deleteAll(ctx context.Context) (count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	var __res sql.Result
 	var __count int64
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM wallets;")

@@ -6,13 +6,9 @@ package tokens
 import (
 	"time"
 
-	"github.com/spacemonkeygo/monkit/v3"
-
 	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
 )
-
-var mon = monkit.Package()
 
 // Payment is on chain payment made for particular contract and deposit wallet.
 type Payment struct {

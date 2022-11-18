@@ -6,6 +6,9 @@ package tokenprice
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/zeebo/errs"
@@ -37,7 +40,12 @@ func NewService(log *zap.Logger, db PriceQuoteDB, client Client, priceWindow tim
 
 // PriceAt retrieves token price at a particular timestamp.
 func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ currency.Amount, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	service.log.Debug("retrieving price at", zap.String("timestamp", timestamp.String()))
 
 	quote, err := service.db.Before(ctx, timestamp)
@@ -65,7 +73,12 @@ func (service *Service) PriceAt(ctx context.Context, timestamp time.Time) (_ cur
 
 // LatestPrice gets the latest available ticker price.
 func (service *Service) LatestPrice(ctx context.Context) (_ time.Time, _ currency.Amount, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	service.log.Debug("retrieving latest price")
 	timestamp, price, err := service.client.GetLatestPrice(ctx)
 	return timestamp, price, ErrService.Wrap(err)
@@ -73,12 +86,22 @@ func (service *Service) LatestPrice(ctx context.Context) (_ time.Time, _ currenc
 
 // SavePrice stores the token price for the given time window.
 func (service *Service) SavePrice(ctx context.Context, timestamp time.Time, price currency.Amount) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	return ErrService.Wrap(service.db.Update(ctx, timestamp, price.BaseUnits()))
 }
 
 // Ping checks that the third-party api is available for use.
 func (service *Service) Ping(ctx context.Context) (statusCode int, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	return service.client.Ping(ctx)
 }

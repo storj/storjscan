@@ -5,16 +5,24 @@ package storjscan
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"net"
+	"os"
+	"storj.io/storj/private/lifecycle"
 	"strings"
+	"time"
 
-	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"storj.io/private/debug"
-	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 	headerCleanup "storj.io/storjscan/blockchain/cleanup"
@@ -25,8 +33,6 @@ import (
 	"storj.io/storjscan/tokens"
 	"storj.io/storjscan/wallets"
 )
-
-var mon = monkit.Package()
 
 // Config wraps storjscan configuration.
 type Config struct {
@@ -103,6 +109,13 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 
 		Servers:  lifecycle.NewGroup(log.Named("servers")),
 		Services: lifecycle.NewGroup(log.Named("services")),
+	}
+
+	{ // setup tracing
+		err := initTracer()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	{ // blockchain
@@ -188,10 +201,48 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	return app, nil
 }
 
+func initTracer() error {
+	ctx := context.Background()
+
+	traceClient := otlptracegrpc.NewClient(
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(os.Getenv("EXPORTER_ENDPOINT")))
+	sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	traceExp, err := otlptrace.New(sctx, traceClient)
+	if err != nil {
+		return err
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithFromEnv(),
+		resource.WithProcess(),
+		resource.WithTelemetrySDK(),
+		resource.WithHost(),
+		resource.WithAttributes(
+			// the service name used to display traces in backends
+			semconv.ServiceNameKey.String(os.Getenv("SERVICE_NAME")),
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	bsp := sdktrace.NewBatchSpanProcessor(traceExp)
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithResource(res),
+		sdktrace.WithSpanProcessor(bsp),
+	)
+
+	// set global propagator to tracecontext (the default is no-op).
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	otel.SetTracerProvider(tracerProvider)
+	return nil
+}
+
 // Run runs storjscan until it's either closed or it errors.
 func (app *App) Run(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
-
 	group, ctx := errgroup.WithContext(ctx)
 
 	app.Servers.Run(ctx, group)

@@ -5,6 +5,9 @@ package tokens
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -64,7 +67,12 @@ func NewService(
 
 // Payments retrieves all ERC20 token payments starting from particular block for ethereum address.
 func (service *Service) Payments(ctx context.Context, address blockchain.Address, from int64) (_ []Payment, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
@@ -114,7 +122,12 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 
 // AllPayments returns all the payments associated with the current satellite.
 func (service *Service) AllPayments(ctx context.Context, satelliteID string, from int64) (_ LatestPayments, err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	service.log.Debug("payments request received for satellite", zap.String("satelliteID", satelliteID))
 
 	if satelliteID == "" {
@@ -200,7 +213,12 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 
 // Ping checks that blockchain service is available for use.
 func (service *Service) Ping(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
 	if err != nil {

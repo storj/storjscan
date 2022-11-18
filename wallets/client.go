@@ -7,8 +7,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"go.opentelemetry.io/otel"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"runtime"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/zeebo/errs"
@@ -37,7 +40,12 @@ func (w *Client) AddWallets(ctx context.Context, addresses map[common.Address]st
 
 // httpPost is a helper to submit any post request with proper error handling.
 func (w *Client) httpPost(ctx context.Context, url string, request interface{}) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	body, err := json.Marshal(request)
 	if err != nil {

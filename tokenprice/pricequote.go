@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 
 	"storj.io/common/currency"
@@ -16,8 +15,6 @@ import (
 var (
 	// ErrNoQuotes is error when no quotes were found in DB.
 	ErrNoQuotes = errs.New("no quotes in db")
-
-	mon = monkit.Package()
 )
 
 // PriceQuote represents an entry in the token_price table.

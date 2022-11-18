@@ -5,7 +5,10 @@ package wallets
 
 import (
 	"encoding/json"
+	"go.opentelemetry.io/otel"
 	"net/http"
+	"os"
+	"runtime"
 
 	"github.com/gorilla/mux"
 	"github.com/zeebo/errs"
@@ -44,7 +47,12 @@ func (endpoint *Endpoint) Register(router *mux.Router) {
 func (endpoint *Endpoint) Claim(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	satellite := api.GetAPIIdentifier(ctx)
 	address, err := endpoint.service.Claim(ctx, satellite)
@@ -65,7 +73,12 @@ func (endpoint *Endpoint) Claim(w http.ResponseWriter, r *http.Request) {
 func (endpoint *Endpoint) AddWallets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var err error
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	var addresses map[blockchain.Address]string
 

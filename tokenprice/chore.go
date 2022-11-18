@@ -5,6 +5,9 @@ package tokenprice
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/zeebo/errs"
@@ -38,9 +41,14 @@ func NewChore(log *zap.Logger, service *Service, interval time.Duration) *Chore 
 
 // Run starts the chore.
 func (chore *Chore) Run(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
-	return chore.Loop.Run(ctx, func(ctx context.Context) error {
-		err := chore.RunOnce(ctx)
+	return chore.Loop.Run(ctx, func(ctx context.Context) (err error) {
+		pc, _, _, _ := runtime.Caller(0)
+		ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+		defer func() {
+			span.RecordError(err)
+			span.End()
+		}()
+		err = chore.RunOnce(ctx)
 		if err != nil {
 			chore.log.Error("Error running token price chore", zap.Error(ErrChore.Wrap(err)))
 			return nil
@@ -51,7 +59,12 @@ func (chore *Chore) Run(ctx context.Context) (err error) {
 
 // RunOnce gets the latest storj ticker price and saves it to the DB.
 func (chore *Chore) RunOnce(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	timeWindow, price, err := chore.service.LatestPrice(ctx)
 	if err != nil {
 		return err

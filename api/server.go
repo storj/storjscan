@@ -8,8 +8,10 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 	"net"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"github.com/zeebo/errs"
@@ -84,6 +86,7 @@ func (server *Server) NewAPI(path string, register func(*mux.Router)) {
 	router := server.router.PathPrefix(path).Subrouter()
 	router.StrictSlash(true)
 	router.Use(server.authorize)
+	router.Use(otelmux.Middleware(os.Getenv("SERVICE_NAME")))
 	register(router)
 }
 

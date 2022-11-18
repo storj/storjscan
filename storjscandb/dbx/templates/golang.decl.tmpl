@@ -1,6 +1,11 @@
 {{- define "decl" }}
 func (obj *{{ .ReceiverBase }}Impl) {{ .Signature }} {
-    defer mon.Task()(&ctx)(&err)
+    	pc, _, _, _ := runtime.Caller(0)
+    	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+    	defer func() {
+    		span.RecordError(err)
+    		span.End()
+    	}()
 {{ .Body }}
 }
 {{ end -}}

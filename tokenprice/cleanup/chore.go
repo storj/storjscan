@@ -5,17 +5,17 @@ package cleanup
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
+	"os"
+	"runtime"
 	"time"
 
-	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
 	"storj.io/common/sync2"
 	"storj.io/storjscan/tokenprice"
 )
-
-var mon = monkit.Package()
 
 // Config is a configuration struct for the Chore.
 type Config struct {
@@ -48,7 +48,12 @@ func NewChore(log *zap.Logger, db tokenprice.PriceQuoteDB, config Config) *Chore
 
 // Run starts the chore.
 func (chore *Chore) Run(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 	return chore.Loop.Run(ctx, func(ctx context.Context) error {
 		err := chore.RunOnce(ctx)
 		if err != nil {
@@ -60,7 +65,12 @@ func (chore *Chore) Run(ctx context.Context) (err error) {
 
 // RunOnce removes old token prices.
 func (chore *Chore) RunOnce(ctx context.Context) (err error) {
-	defer mon.Task()(&ctx)(&err)
+	pc, _, _, _ := runtime.Caller(0)
+	ctx, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, runtime.FuncForPC(pc).Name())
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
 
 	if chore.config.RetainDays < 0 {
 		return errs.New("retain days cannot be less than 0")

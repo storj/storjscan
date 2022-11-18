@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 
 	"storj.io/private/dbutil/cockroachutil"
@@ -17,8 +16,6 @@ import (
 )
 
 //go:generate sh gen.sh
-
-var mon = monkit.Package()
 
 func init() {
 	// catch dbx errors

@@ -6,17 +6,16 @@ package health
 import (
 	"context"
 	"fmt"
+	"go.opentelemetry.io/otel"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
-	"github.com/spacemonkeygo/monkit/v3"
 	"go.uber.org/zap"
 
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokens"
 )
-
-var mon = monkit.Package()
 
 // Endpoint for liveness and readiness checks.
 //
@@ -67,7 +66,9 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 	if err = endpoint.db.Ping(ctx); err != nil {
 		status = http.StatusServiceUnavailable
 		message += "db:failure\n"
-		mon.Event("health-db-failure")
+		_, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, "Ready Check")
+		span.AddEvent("health-db-failure")
+		span.End()
 		endpoint.log.Error(fmt.Sprintf("db failure: %s", err.Error()))
 	} else {
 		message += "db:ok\n"
@@ -78,10 +79,14 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 	sc, err := endpoint.tokenPrice.Ping(ctx)
 	if sc != http.StatusOK || err != nil {
 		message += "tokenprice:failure\n"
-		mon.Event("health-tokenprice-failure")
+		_, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, "Ready Check")
+		span.AddEvent("health-tokenprice-failure")
+		span.End()
 		endpoint.log.Error(fmt.Sprintf("tokenprice failure: %d\n", sc))
 		if err != nil {
-			mon.Event("health-tokenprice-error")
+			_, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, "Ready Check")
+			span.AddEvent("health-tokenprice-error")
+			span.End()
 			endpoint.log.Error(fmt.Sprintf("tokenprice error: %s\n", err.Error()))
 		}
 	} else {
@@ -92,7 +97,9 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 	// test blockchain service
 	if err = endpoint.tokenService.Ping(ctx); err != nil {
 		message += "blockchain:failure\n"
-		mon.Event("health-blockchain-failure")
+		_, span := otel.Tracer(os.Getenv("SERVICE_NAME")).Start(ctx, "Ready Check")
+		span.AddEvent("health-blockchain-failure")
+		span.End()
 		endpoint.log.Error(fmt.Sprintf("blockchain failure: %s\n", err.Error()))
 	} else {
 		message += "blockchain:ok\n"
