@@ -36,12 +36,12 @@ node('node') {
       echo "Current build result: ${currentBuild.result}"
     }
 
-    //stage('Upload') {
-    //  lastStage = env.STAGE_NAME
-    //  sh 'make binaries-upload'
-    //
-    //  echo "Current build result: ${currentBuild.result}"
-    //}
+    stage('Upload') {
+      lastStage = env.STAGE_NAME
+      sh 'make binaries-upload'
+    
+      echo "Current build result: ${currentBuild.result}"
+    }
   }
   catch (err) {
     echo "Caught errors! ${err}"
