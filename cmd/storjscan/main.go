@@ -132,6 +132,13 @@ func run(ctx context.Context, config runConfig) error {
 			log.Println(err)
 		}
 	}()
+
+	log := logger.Named("storjscan")
+
+	if err := process.InitMetricsWithHostname(ctx, log, nil); err != nil {
+		log.Warn("Failed to initialize telemetry batcher for storjscan", zap.Error(err))
+	}
+
 	db, err := openDatabaseWithRetry(ctx, logger, config.Database)
 	if err != nil {
 		return err
@@ -148,7 +155,7 @@ func run(ctx context.Context, config runConfig) error {
 		}
 	}
 
-	app, err := storjscan.NewApp(logger.Named("storjscan"), config.Config, db)
+	app, err := storjscan.NewApp(log, config.Config, db)
 	if err != nil {
 		return err
 	}
