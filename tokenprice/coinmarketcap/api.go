@@ -36,8 +36,8 @@ type latestQuote struct {
 
 // QuoteHistoricResponse is the response structure from the coinmarketcap api for historic data.
 type quoteHistoricResponse struct {
-	Status status                       `json:"status"`
-	Data   map[string]quoteHistoricData `json:"data"`
+	Status status            `json:"status"`
+	Data   quoteHistoricData `json:"data"`
 }
 
 // QuoteHistoricData struct contains historic quote map as well as metadata.

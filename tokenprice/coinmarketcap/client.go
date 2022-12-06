@@ -59,7 +59,7 @@ func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount
 	q.Add("id", storjID)
 	q.Add("convert", usdSymbol)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/cryptocurrency/quotes/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v2/cryptocurrency/quotes/latest", nil)
 	if err != nil {
 		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
@@ -103,10 +103,9 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 	q := url.Values{}
 	q.Add("id", storjID)
 	q.Add("convert", usdSymbol)
-	q.Add("time_start", strconv.FormatInt(requestedTimestamp.UnixMilli(), 10))
-	q.Add("time_end", strconv.FormatInt(requestedTimestamp.UnixMilli()+1, 10))
+	q.Add("time_end", strconv.FormatInt(requestedTimestamp.UnixMilli(), 10))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/cryptocurrency/quotes/historical", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v2/cryptocurrency/quotes/historical", nil)
 	if err != nil {
 		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
@@ -135,12 +134,15 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 		return time.Time{}, currency.Amount{}, ErrClient.New("unexpected status code: %d", resp.StatusCode)
 	}
 
-	returnedTimestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Timestamp)
+	if len(formattedResp.Data.Quotes) == 0 {
+		return time.Time{}, currency.Amount{}, ErrClient.New("Unable to get valid price for provided time")
+	}
+	returnedTimestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data.Quotes[len(formattedResp.Data.Quotes)-1].Quote[usdSymbol].Timestamp)
 	if err != nil {
 		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
-	amount := currency.AmountFromDecimal(formattedResp.Data[storjID].Quotes[0].Quote[usdSymbol].Price, currency.USDollarsMicro)
+	amount := currency.AmountFromDecimal(formattedResp.Data.Quotes[len(formattedResp.Data.Quotes)-1].Quote[usdSymbol].Price, currency.USDollarsMicro)
 	return returnedTimestamp, amount, nil
 }
 
