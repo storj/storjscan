@@ -333,14 +333,16 @@ CREATE TABLE token_prices (
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
+	id bigserial NOT NULL,
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
 	satellite text NOT NULL,
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
-	PRIMARY KEY ( address )
+	PRIMARY KEY ( id )
 );
-CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;`
+CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
+CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;`
 }
 
 func (obj *pgxDB) wrapTx(tx tagsql.Tx) txMethods {
@@ -453,14 +455,16 @@ CREATE TABLE token_prices (
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
+	id bigserial NOT NULL,
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
 	satellite text NOT NULL,
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
-	PRIMARY KEY ( address )
+	PRIMARY KEY ( id )
 );
-CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;`
+CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
+CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;`
 }
 
 func (obj *pgxcockroachDB) wrapTx(tx tagsql.Tx) txMethods {
@@ -662,6 +666,7 @@ func (f TokenPrice_Price_Field) value() interface{} {
 func (TokenPrice_Price_Field) _Column() string { return "price" }
 
 type Wallet struct {
+	Id        int64
 	Address   []byte
 	Claimed   *time.Time
 	Satellite string
@@ -680,6 +685,25 @@ type Wallet_Update_Fields struct {
 	Claimed Wallet_Claimed_Field
 	Info    Wallet_Info_Field
 }
+
+type Wallet_Id_Field struct {
+	_set   bool
+	_null  bool
+	_value int64
+}
+
+func Wallet_Id(v int64) Wallet_Id_Field {
+	return Wallet_Id_Field{_set: true, _value: v}
+}
+
+func (f Wallet_Id_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (Wallet_Id_Field) _Column() string { return "id" }
 
 type Wallet_Address_Field struct {
 	_set   bool
@@ -1292,7 +1316,7 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?, ?, ?")}
 	var __clause = &__sqlbundle_Hole{SQL: __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("("), __columns, __sqlbundle_Literal(") VALUES ("), __placeholders, __sqlbundle_Literal(")")}}}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	var __values []interface{}
 	__values = append(__values, __address_val, __claimed_val, __satellite_val, __info_val)
@@ -1301,7 +1325,7 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 	if err != nil {
 		return nil, obj.makeErr(err)
 	}
@@ -1507,7 +1531,7 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ?")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ? LIMIT 2")
 
 	var __values []interface{}
 	__values = append(__values, wallet_address.value(), wallet_satellite.value())
@@ -1515,12 +1539,48 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
-	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
-	if err != nil {
-		return (*Wallet)(nil), obj.makeErr(err)
+	for {
+		wallet, err = func() (wallet *Wallet, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, sql.ErrNoRows
+			}
+
+			wallet = &Wallet{}
+			err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+
+			if __rows.Next() {
+				return nil, errTooManyRows
+			}
+
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+
+			return wallet, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			if err == errTooManyRows {
+				return nil, tooManyRows("Wallet_By_Address_And_Satellite")
+			}
+			return nil, obj.makeErr(err)
+		}
+		return wallet, nil
 	}
-	return wallet, nil
 
 }
 
@@ -1529,7 +1589,7 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Co
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
 	__values = append(__values, wallet_satellite.value())
@@ -1553,7 +1613,7 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Co
 			}
 
 			wallet = &Wallet{}
-			err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+			err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 			if err != nil {
 				return nil, err
 			}
@@ -1636,7 +1696,7 @@ func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.C
 	rows []*Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
 	var __values []interface{}
 	__values = append(__values, wallet_satellite.value())
@@ -1654,7 +1714,7 @@ func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.C
 
 			for __rows.Next() {
 				wallet := &Wallet{}
-				err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+				err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 				if err != nil {
 					return nil, err
 				}
@@ -1676,15 +1736,14 @@ func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.C
 
 }
 
-func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
-	wallet_address Wallet_Address_Field,
-	wallet_satellite Wallet_Satellite_Field,
+func (obj *pgxImpl) Update_Wallet_By_Id(ctx context.Context,
+	wallet_id Wallet_Id_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 	var __sets = &__sqlbundle_Hole{}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? AND wallets.satellite = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.id = ? RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
 	var __values []interface{}
@@ -1704,7 +1763,7 @@ func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 		return nil, emptyUpdate()
 	}
 
-	__args = append(__args, wallet_address.value(), wallet_satellite.value())
+	__args = append(__args, wallet_id.value())
 
 	__values = append(__values, __args...)
 	__sets.SQL = __sets_sql
@@ -1713,7 +1772,7 @@ func (obj *pgxImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -1923,7 +1982,7 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?, ?, ?")}
 	var __clause = &__sqlbundle_Hole{SQL: __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("("), __columns, __sqlbundle_Literal(") VALUES ("), __placeholders, __sqlbundle_Literal(")")}}}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	var __values []interface{}
 	__values = append(__values, __address_val, __claimed_val, __satellite_val, __info_val)
@@ -1932,7 +1991,7 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 	if err != nil {
 		return nil, obj.makeErr(err)
 	}
@@ -2138,7 +2197,7 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ?")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ? LIMIT 2")
 
 	var __values []interface{}
 	__values = append(__values, wallet_address.value(), wallet_satellite.value())
@@ -2146,12 +2205,48 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
 
-	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
-	if err != nil {
-		return (*Wallet)(nil), obj.makeErr(err)
+	for {
+		wallet, err = func() (wallet *Wallet, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, sql.ErrNoRows
+			}
+
+			wallet = &Wallet{}
+			err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+
+			if __rows.Next() {
+				return nil, errTooManyRows
+			}
+
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+
+			return wallet, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			if err == errTooManyRows {
+				return nil, tooManyRows("Wallet_By_Address_And_Satellite")
+			}
+			return nil, obj.makeErr(err)
+		}
+		return wallet, nil
 	}
-	return wallet, nil
 
 }
 
@@ -2160,7 +2255,7 @@ func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx c
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
 	var __values []interface{}
 	__values = append(__values, wallet_satellite.value())
@@ -2184,7 +2279,7 @@ func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx c
 			}
 
 			wallet = &Wallet{}
-			err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+			err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 			if err != nil {
 				return nil, err
 			}
@@ -2267,7 +2362,7 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx 
 	rows []*Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
 	var __values []interface{}
 	__values = append(__values, wallet_satellite.value())
@@ -2285,7 +2380,7 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx 
 
 			for __rows.Next() {
 				wallet := &Wallet{}
-				err = __rows.Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+				err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 				if err != nil {
 					return nil, err
 				}
@@ -2307,15 +2402,14 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx 
 
 }
 
-func (obj *pgxcockroachImpl) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
-	wallet_address Wallet_Address_Field,
-	wallet_satellite Wallet_Satellite_Field,
+func (obj *pgxcockroachImpl) Update_Wallet_By_Id(ctx context.Context,
+	wallet_id Wallet_Id_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
 	defer mon.Task()(&ctx)(&err)
 	var __sets = &__sqlbundle_Hole{}
 
-	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.address = ? AND wallets.satellite = ? RETURNING wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.id = ? RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
 	var __values []interface{}
@@ -2335,7 +2429,7 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Address_And_Satellite(ctx context.
 		return nil, emptyUpdate()
 	}
 
-	__args = append(__args, wallet_address.value(), wallet_satellite.value())
+	__args = append(__args, wallet_id.value())
 
 	__values = append(__values, __args...)
 	__sets.SQL = __sets_sql
@@ -2344,7 +2438,7 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Address_And_Satellite(ctx context.
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2703,16 +2797,15 @@ func (rx *Rx) ReplaceNoReturn_TokenPrice(ctx context.Context,
 
 }
 
-func (rx *Rx) Update_Wallet_By_Address_And_Satellite(ctx context.Context,
-	wallet_address Wallet_Address_Field,
-	wallet_satellite Wallet_Satellite_Field,
+func (rx *Rx) Update_Wallet_By_Id(ctx context.Context,
+	wallet_id Wallet_Id_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
 	var tx *Tx
 	if tx, err = rx.getTx(ctx); err != nil {
 		return
 	}
-	return tx.Update_Wallet_By_Address_And_Satellite(ctx, wallet_address, wallet_satellite, update)
+	return tx.Update_Wallet_By_Id(ctx, wallet_id, update)
 }
 
 type Methods interface {
@@ -2786,9 +2879,8 @@ type Methods interface {
 		token_price_price TokenPrice_Price_Field) (
 		err error)
 
-	Update_Wallet_By_Address_And_Satellite(ctx context.Context,
-		wallet_address Wallet_Address_Field,
-		wallet_satellite Wallet_Satellite_Field,
+	Update_Wallet_By_Id(ctx context.Context,
+		wallet_id Wallet_Id_Field,
 		update Wallet_Update_Fields) (
 		wallet *Wallet, err error)
 }

@@ -36,13 +36,16 @@ func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address bloc
 	return &wallets.Wallet{Address: address, Satellite: satellite, Info: info}, nil
 }
 
-// InsertBatch adds a new db entry for each address. Entries is a string map of address:info. Info can be an empty string.
-func (wdb *walletsDB) InsertBatch(ctx context.Context, satellite string, entries map[blockchain.Address]string) error {
+// InsertBatch adds a new db entry for each address. Entries is a slice of insert wallet data.
+func (wdb *walletsDB) InsertBatch(ctx context.Context, satellite string, entries []wallets.InsertWallet) error {
 	err := wdb.db.WithTx(ctx, func(ctx context.Context, tx *dbx.Tx) error {
 		var err error
 
-		for address, info := range entries {
-			_, err := tx.Tx.Exec(ctx, tx.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
+		for _, wallet := range entries {
+			_, err := tx.Tx.Exec(ctx, tx.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"),
+				satellite,
+				wallet.Address.Bytes(),
+				wallet.Info)
 			if err != nil {
 				return err
 			}
@@ -63,9 +66,8 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 		if w1 == nil {
 			return wallets.ErrNoAvailableWallets
 		}
-		w2, err := tx.Update_Wallet_By_Address_And_Satellite(ctx,
-			dbx.Wallet_Address(w1.Address),
-			dbx.Wallet_Satellite(satellite),
+		w2, err := tx.Update_Wallet_By_Id(ctx,
+			dbx.Wallet_Id(w1.Id),
 			dbx.Wallet_Update_Fields{
 				Claimed: dbx.Wallet_Claimed(time.Now()),
 			})

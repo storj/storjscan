@@ -52,8 +52,9 @@ read first (
 )
 
 model wallet (
-	key address
+	key id
 
+	field id         serial64
 	field address    blob
 	field claimed    timestamp ( updatable, nullable )
 	field satellite  text
@@ -61,12 +62,15 @@ model wallet (
 	field created_at timestamp ( autoinsert, default current_timestamp )
 
 	index ( fields satellite )
+	index (
+		fields address
+		unique
+	)
 )
 
 create wallet ( )
 update wallet (
-	where wallet.address   = ?
-	where wallet.satellite = ?
+	where wallet.id = ?
 )
 
 read one (

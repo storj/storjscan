@@ -269,16 +269,19 @@ func importCSV(cmd *cobra.Command, args []string) (err error) {
 		return errs.New("malformed csv")
 	}
 
-	addresses := map[common.Address]string{}
+	var inserts []wallets.InsertWallet
 	for _, record := range records[1:] {
 		address, err := safeHexToAddress(record[0])
 		if err != nil {
 			return err
 		}
 
-		addresses[address] = record[1]
+		inserts = append(inserts, wallets.InsertWallet{
+			Address: address,
+			Info:    record[1],
+		})
 	}
 
 	client := wallets.NewClient(importCfg.Address, importCfg.APIKey, importCfg.APISecret)
-	return client.AddWallets(ctx, addresses)
+	return client.AddWallets(ctx, inserts)
 }

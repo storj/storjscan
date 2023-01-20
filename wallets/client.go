@@ -10,7 +10,6 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/zeebo/errs"
 )
 
@@ -31,8 +30,8 @@ func NewClient(endpoint string, apiKey string, secret string) *Client {
 }
 
 // AddWallets sends claimable generated addresses to the backend.
-func (w *Client) AddWallets(ctx context.Context, addresses map[common.Address]string) error {
-	return w.httpPost(ctx, w.Endpoint+"/api/v0/wallets/", addresses)
+func (w *Client) AddWallets(ctx context.Context, inserts []InsertWallet) error {
+	return w.httpPost(ctx, w.Endpoint+"/api/v0/wallets/", inserts)
 }
 
 // httpPost is a helper to submit any post request with proper error handling.

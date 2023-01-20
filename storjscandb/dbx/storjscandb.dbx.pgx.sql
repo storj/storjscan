@@ -13,11 +13,13 @@ CREATE TABLE token_prices (
 	PRIMARY KEY ( interval_start )
 );
 CREATE TABLE wallets (
+	id bigserial NOT NULL,
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
 	satellite text NOT NULL,
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
-	PRIMARY KEY ( address )
+	PRIMARY KEY ( id )
 );
 CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
+CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;

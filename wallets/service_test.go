@@ -117,21 +117,24 @@ func generateTestAddresses(ctx context.Context, service *wallets.Service, count 
 		return err
 	}
 
-	var entries = make(map[blockchain.Address]string)
+	var inserts []wallets.InsertWallet
 	next := accounts.DefaultIterator(accounts.DefaultBaseDerivationPath)
 	for i := 0; i < count; i++ {
 		account, err := derive(masterKey, next())
 		if err != nil {
 			return err
 		}
-		entries[account.Address] = "test-info"
+		inserts = append(inserts, wallets.InsertWallet{
+			Address: account.Address,
+			Info:    "test-info",
+		})
 	}
 
-	if len(entries) < 1 {
+	if len(inserts) < 1 {
 		return errors.New("no addresses created")
 	}
 
-	err = service.Register(ctx, "test-satellite", entries)
+	err = service.Register(ctx, "test-satellite", inserts)
 	return err
 }
 

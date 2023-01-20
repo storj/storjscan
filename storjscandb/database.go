@@ -166,6 +166,31 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					CREATE INDEX wallets_satellite_index ON wallets ( satellite );`,
 				},
 			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Add id column for new primary key for wallets table",
+				Version:     1,
+				Action: migrate.SQL{
+					`ALTER TABLE wallets ADD COLUMN id bigserial NOT NULL;`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Make id column new primary key for wallets table",
+				Version:     2,
+				Action: migrate.SQL{
+					`ALTER TABLE wallets DROP CONSTRAINT wallets_pkey;`,
+					`ALTER TABLE wallets ADD CONSTRAINT wallets_pkey PRIMARY KEY ( id );`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Create unique index for address column for wallets table",
+				Version:     3,
+				Action: migrate.SQL{
+					`CREATE UNIQUE INDEX wallets_address_index ON wallets ( address );`,
+				},
+			},
 		},
 	}
 }

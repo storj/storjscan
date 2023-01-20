@@ -50,13 +50,29 @@ func TestGenerate(t *testing.T) {
 		addresses1, err := wallets.Generate(ctx, "defaultkey", 0, 5, mnemonic)
 		require.NoError(t, err)
 		client1 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
-		err = client1.AddWallets(ctx, addresses1)
+
+		var inserts1 []wallets.InsertWallet
+		for address, info := range addresses1 {
+			inserts1 = append(inserts1, wallets.InsertWallet{
+				Address: address,
+				Info:    info,
+			})
+		}
+		err = client1.AddWallets(ctx, inserts1)
 		require.NoError(t, err)
 
 		addresses2, err := wallets.Generate(ctx, "defaultkey", 0, 10, mnemonic)
 		require.NoError(t, err)
 		client2 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
-		err = client2.AddWallets(ctx, addresses2)
+
+		var inserts2 []wallets.InsertWallet
+		for address, info := range addresses2 {
+			inserts2 = append(inserts2, wallets.InsertWallet{
+				Address: address,
+				Info:    info,
+			})
+		}
+		err = client2.AddWallets(ctx, inserts2)
 		require.NoError(t, err)
 
 		// claim all of them
@@ -86,6 +102,5 @@ func TestGenerate(t *testing.T) {
 
 			require.Equal(t, derived.Address, a)
 		}
-
 	})
 }

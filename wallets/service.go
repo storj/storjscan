@@ -80,10 +80,10 @@ func (service *Service) ListBySatellite(ctx context.Context, satellite string) (
 }
 
 // Register inserts the addresses (key) and any associated info (value) to the persistent storage.
-func (service *Service) Register(ctx context.Context, satellite string, addresses map[blockchain.Address]string) error {
+func (service *Service) Register(ctx context.Context, satellite string, inserts []InsertWallet) error {
 	var err error
 	defer mon.Task()(&ctx)(&err)
-	err = service.db.InsertBatch(ctx, satellite, addresses)
-	service.log.Debug("new wallets added to DB", zap.String("satellite", satellite), zap.Int("number of new wallets", len(addresses)))
+	err = service.db.InsertBatch(ctx, satellite, inserts)
+	service.log.Debug("new wallets added to DB", zap.String("satellite", satellite), zap.Int("number of new wallets", len(inserts)))
 	return ErrWalletsService.Wrap(err)
 }

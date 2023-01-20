@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/storjscan/api"
-	"storj.io/storjscan/blockchain"
 )
 
 // ErrEndpoint is the wallets endpoint error class.
@@ -67,9 +66,9 @@ func (endpoint *Endpoint) AddWallets(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
 
-	var addresses map[blockchain.Address]string
+	var inserts []InsertWallet
 
-	err = json.NewDecoder(r.Body).Decode(&addresses)
+	err = json.NewDecoder(r.Body).Decode(&inserts)
 	if err != nil {
 		api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 		return
@@ -77,7 +76,7 @@ func (endpoint *Endpoint) AddWallets(w http.ResponseWriter, r *http.Request) {
 
 	satellite := api.GetAPIIdentifier(ctx)
 
-	err = endpoint.service.Register(ctx, satellite, addresses)
+	err = endpoint.service.Register(ctx, satellite, inserts)
 
 	if err != nil {
 		api.ServeJSONError(endpoint.log, w, http.StatusInternalServerError, ErrEndpoint.Wrap(err))

@@ -27,14 +27,20 @@ type Wallet struct {
 	CreatedAt time.Time
 }
 
+// InsertWallet gathers data needed to insert a wallet.
+type InsertWallet struct {
+	Address blockchain.Address
+	Info    string
+}
+
 // DB is a wallets database that stores deposit address information.
 //
 // architecture: Database
 type DB interface {
 	// Insert adds a new entry in the wallets table. Info can be an empty string.
 	Insert(ctx context.Context, satellite string, address blockchain.Address, info string) (*Wallet, error)
-	// InsertBatch adds a new db entry for each address. Entries is a string map of address:info.
-	InsertBatch(ctx context.Context, satellite string, entries map[blockchain.Address]string) error
+	// InsertBatch adds a new db entry for each address. Entries is a slice of insert wallet data.
+	InsertBatch(ctx context.Context, satellite string, entries []InsertWallet) error
 	// Claim claims and returns the first unclaimed wallet address.
 	Claim(ctx context.Context, satellite string) (*Wallet, error)
 	// Get returns the information stored for a given address.
