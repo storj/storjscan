@@ -87,9 +87,12 @@ func NewNetwork() (*Network, error) {
 	ethConfig.NetworkId = 1337
 	ethConfig.SyncMode = downloader.FullSync
 	ethConfig.Miner.GasPrice = big.NewInt(1)
+	ethConfig.Miner.Etherbase = base.Address
 	ethConfig.Genesis = genesis
-	_, ethereum := utils.RegisterEthService(stack, &ethConfig)
+	ethConfig.FilterLogCacheSize = 100
+	backend, ethereum := utils.RegisterEthService(stack, &ethConfig)
 
+	utils.RegisterFilterAPI(stack, backend, &ethConfig)
 	return &Network{
 		ethereum:  ethereum,
 		stack:     stack,
