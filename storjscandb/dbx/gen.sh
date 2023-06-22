@@ -6,7 +6,7 @@ dbx golang -d pgx -d pgxcockroach -p dbx -t templates storjscandb.dbx .
 gofmt -r "*sql.Tx -> tagsql.Tx" -w storjscandb.dbx.go
 gofmt -r "*sql.Rows -> tagsql.Rows" -w storjscandb.dbx.go
 perl -0777 -pi \
-  -e 's,\t_ "github.com/jackc/pgx/v4/stdlib"\n\),\t_ "github.com/jackc/pgx/v4/stdlib"\n\n\t"storj.io/private/tagsql"\n\),' \
+  -e 's,\t_ "github.com/jackc/pgx/v5/stdlib"\n\),\t_ "github.com/jackc/pgx/v5/stdlib"\n\n\t"storj.io/private/tagsql"\n\),' \
   storjscandb.dbx.go
 perl -0777 -pi \
   -e 's/type DB struct \{\n\t\*sql\.DB/type DB struct \{\n\ttagsql.DB/' \
