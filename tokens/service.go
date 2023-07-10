@@ -63,19 +63,19 @@ func NewService(
 }
 
 // Payments retrieves all ERC20 token payments starting from particular block for ethereum address.
-func (service *Service) Payments(ctx context.Context, address blockchain.Address, from int64) (_ []Payment, err error) {
+func (service *Service) Payments(ctx context.Context, address blockchain.Address, from int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
 	client, err := ethclient.DialContext(ctx, service.endpoint)
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
 
 	token, err := erc20.NewERC20(service.token, client)
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 
 	opts := &bind.FilterOpts{
@@ -85,19 +85,24 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	}
 	iter, err := token.FilterTransfer(opts, nil, []common.Address{address})
 	if err != nil {
-		return nil, ErrService.Wrap(err)
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	defer func() { err = errs.Combine(err, ErrService.Wrap(iter.Close())) }()
+
+	latestBlock, err := client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
+	}
 
 	var payments []Payment
 	for iter.Next() {
 		header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
 		if err != nil {
-			return nil, ErrService.Wrap(err)
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
 		price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
 		if err != nil {
-			return nil, ErrService.Wrap(err)
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
 
 		payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
@@ -109,7 +114,15 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 		)
 	}
 
-	return payments, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
+	header := blockchain.Header{
+		Hash:      latestBlock.Hash(),
+		Number:    latestBlock.Number.Int64(),
+		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),
+	}
+	return LatestPayments{
+		LatestBlock: header,
+		Payments:    payments,
+	}, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
 }
 
 // AllPayments returns all the payments associated with the current satellite.
