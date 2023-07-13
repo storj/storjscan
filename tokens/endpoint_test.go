@@ -167,16 +167,25 @@ func testEndpoint(t *testing.T, connStr string) {
 			defer ctx.Check(func() error { return resp.Body.Close() })
 			require.Equal(t, http.StatusOK, resp.StatusCode)
 
-			var payments []tokens.Payment
+			currentHead, err := client.HeaderByNumber(ctx, nil)
+			require.NoError(t, err)
+			latestBlockHeader := blockchain.Header{
+				Hash:      currentHead.Hash(),
+				Number:    currentHead.Number.Int64(),
+				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
+			}
+
+			var payments tokens.LatestPayments
 			err = json.NewDecoder(resp.Body).Decode(&payments)
 			require.NoError(t, err)
-			require.Equal(t, accounts[0].Address, payments[0].From)
-			require.EqualValues(t, 1000000, payments[0].TokenValue)
-			require.EqualValues(t, 1000000*price, payments[0].USDValue)
-			require.Equal(t, recpt.BlockHash, payments[0].BlockHash)
-			require.Equal(t, recpt.BlockNumber.Int64(), payments[0].BlockNumber)
-			require.Equal(t, tx.Hash(), payments[0].Transaction)
-			require.Equal(t, 0, payments[0].LogIndex)
+			require.Equal(t, latestBlockHeader, payments.LatestBlock)
+			require.Equal(t, accounts[0].Address, payments.Payments[0].From)
+			require.EqualValues(t, 1000000, payments.Payments[0].TokenValue)
+			require.EqualValues(t, 1000000*price, payments.Payments[0].USDValue)
+			require.Equal(t, recpt.BlockHash, payments.Payments[0].BlockHash)
+			require.Equal(t, recpt.BlockNumber.Int64(), payments.Payments[0].BlockNumber)
+			require.Equal(t, tx.Hash(), payments.Payments[0].Transaction)
+			require.Equal(t, 0, payments.Payments[0].LogIndex)
 		})
 
 		t.Run("/payments REST endpoint is working", func(t *testing.T) {

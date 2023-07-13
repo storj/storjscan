@@ -121,7 +121,17 @@ func testPayments(t *testing.T, connStr string) {
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
 		require.NoError(t, err)
 
-		for i, payment := range payments {
+		currentHead, err := client.HeaderByNumber(ctx, nil)
+		require.NoError(t, err)
+		latestBlockHeader := blockchain.Header{
+			Hash:      currentHead.Hash(),
+			Number:    currentHead.Number.Int64(),
+			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
+		}
+
+		require.Equal(t, latestBlockHeader, payments.LatestBlock)
+
+		for i, payment := range payments.Payments {
 			testPayment := testPayments[i]
 			a := currency.AmountFromBaseUnits(testPayment.Amount, currency.StorjToken)
 
