@@ -12,7 +12,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
@@ -50,14 +49,9 @@ func TestImport(t *testing.T) {
 		addresses, err := wallets.Generate(ctx, "defaultkey", 0, 5, mnemonic)
 		require.NoError(t, err)
 
-		addressesSlice := []common.Address{}
-		for address := range addresses {
-			addressesSlice = append(addressesSlice, address)
-		}
-
 		// sort descending
-		sort.Slice(addressesSlice, func(i, j int) bool {
-			return bytes.Compare(addressesSlice[i].Bytes(), addressesSlice[j].Bytes()) > 0
+		sort.Slice(addresses, func(i, j int) bool {
+			return bytes.Compare(addresses[i].Address.Bytes(), addresses[j].Address.Bytes()) > 0
 		})
 
 		importFilePath := ctx.File("wallets.csv")
@@ -65,9 +59,8 @@ func TestImport(t *testing.T) {
 		require.NoError(t, err)
 
 		fmt.Fprintln(importFile, "address,info")
-		for _, address := range addressesSlice {
-			info := addresses[address]
-			fmt.Fprintf(importFile, "%s,%s\n", address.String(), info)
+		for _, address := range addresses {
+			fmt.Fprintf(importFile, "%s,%s\n", address.Address.String(), address.Info)
 		}
 		require.NoError(t, importFile.Close())
 
@@ -77,7 +70,7 @@ func TestImport(t *testing.T) {
 		require.NoErrorf(t, err, "Error running test: %s", out)
 
 		// verify that addresses are claimed in the import order
-		for _, expectedAddress := range addressesSlice {
+		for _, expectedAddress := range addresses {
 			address, err := service.Claim(ctx, "eu1")
 			require.NoError(t, err)
 

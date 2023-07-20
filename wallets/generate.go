@@ -48,9 +48,14 @@ func derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (ac
 	}, nil
 }
 
+type GeneratedAddress struct {
+	Address common.Address
+	Info    string
+}
+
 // Generate creates new HD wallet addresses.
-func Generate(ctx context.Context, keysname string, min, max int, mnemonic string) (map[common.Address]string, error) {
-	addr := make(map[common.Address]string)
+func Generate(ctx context.Context, keysname string, min, max int, mnemonic string) ([]GeneratedAddress, error) {
+	addrs := make([]GeneratedAddress, 0, max-min)
 
 	if mnemonic == "" {
 		return nil, errs.New("mnemonic is required")
@@ -80,7 +85,10 @@ func Generate(ctx context.Context, keysname string, min, max int, mnemonic strin
 		if err != nil {
 			return nil, err
 		}
-		addr[account.Address] = keysname + " " + path.String()
+		addrs = append(addrs, GeneratedAddress{
+			Address: account.Address,
+			Info:    keysname + " " + path.String(),
+		})
 	}
-	return addr, nil
+	return addrs, nil
 }
