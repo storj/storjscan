@@ -74,7 +74,7 @@ func TestImport(t *testing.T) {
 			address, err := service.Claim(ctx, "eu1")
 			require.NoError(t, err)
 
-			require.Equal(t, expectedAddress, address)
+			require.Equal(t, expectedAddress.Address, address)
 		}
 
 		// no more wallets to claim
