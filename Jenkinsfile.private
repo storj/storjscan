@@ -1,5 +1,5 @@
 def lastStage = ''
-node('node') {
+node('ondemand') {
   properties([disableConcurrentBuilds()])
   try {
     currentBuild.result = "SUCCESS"
