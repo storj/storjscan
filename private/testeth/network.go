@@ -40,6 +40,7 @@ func NewNetwork() (*Network, error) {
 	config.DataDir = ""
 	config.HTTPHost = "127.0.0.1"
 	config.HTTPPort = 0
+	config.AuthPort = 0
 	config.HTTPModules = append(config.HTTPModules, "eth")
 	config.P2P.MaxPeers = 0
 	config.P2P.ListenAddr = ""

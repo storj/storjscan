@@ -152,7 +152,7 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					CREATE INDEX block_header_timestamp ON block_headers ( timestamp ) ;
 					CREATE TABLE token_prices (
 						interval_start timestamp with time zone NOT NULL,
-						price bigint NOT NULL,
+						price double precision NOT NULL,
 						PRIMARY KEY ( interval_start )
 					);
 					CREATE TABLE wallets (
@@ -189,6 +189,23 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 				Version:     3,
 				Action: migrate.SQL{
 					`CREATE UNIQUE INDEX wallets_address_index ON wallets ( address );`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Delete existing price records and drop price column",
+				Version:     4,
+				Action: migrate.SQL{
+					`DELETE FROM token_prices;`,
+					`ALTER TABLE token_prices DROP COLUMN price;`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Add price column as int64",
+				Version:     5,
+				Action: migrate.SQL{
+					`ALTER TABLE token_prices ADD COLUMN price bigint NOT NULL;`,
 				},
 			},
 		},
