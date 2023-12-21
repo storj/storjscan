@@ -196,7 +196,7 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 				Description: "Delete existing price records and drop price column",
 				Version:     4,
 				Action: migrate.SQL{
-					`DELETE FROM token_prices;`,
+					`TRUNCATE TABLE token_prices;`,
 					`ALTER TABLE token_prices DROP COLUMN price;`,
 				},
 			},
