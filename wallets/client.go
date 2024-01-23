@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/zeebo/errs"
@@ -57,7 +57,7 @@ func (w *Client) httpPost(ctx context.Context, url string, request interface{}) 
 	}()
 
 	if resp.StatusCode > 200 {
-		body, readErr := ioutil.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
 		err = errs.Combine(errs.New("HTTP status %d for %s, %s", resp.StatusCode, url, string(body)), readErr)
 		return
 	}

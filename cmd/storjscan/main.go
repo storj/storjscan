@@ -8,7 +8,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -203,7 +202,7 @@ func migrate(ctx context.Context, config runConfig) (err error) {
 
 func generate(cmd *cobra.Command, args []string) (err error) {
 	ctx, _ := process.Ctx(cmd)
-	mnemonic, err := ioutil.ReadFile(generateCfg.MnemonicFile)
+	mnemonic, err := os.ReadFile(generateCfg.MnemonicFile)
 	if err != nil {
 		return errs.New("Couldn't read mnemonic from %s: %v", generateCfg.MnemonicFile, err)
 	}

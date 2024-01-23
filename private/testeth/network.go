@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -31,6 +32,35 @@ type Network struct {
 	stack     *node.Node
 	keystore  *keystore.KeyStore
 	developer accounts.Account
+}
+
+func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
+	config := *params.AllCliqueProtocolChanges
+	config.Clique = &params.CliqueConfig{
+		Period: period,
+		Epoch:  config.Clique.Epoch,
+	}
+
+	// Assemble and return the genesis with the precompiles and faucet pre-funded
+	return &core.Genesis{
+		Config:     &config,
+		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
+		GasLimit:   gasLimit,
+		BaseFee:    big.NewInt(params.InitialBaseFee),
+		Difficulty: big.NewInt(1),
+		Alloc: map[common.Address]core.GenesisAccount{
+			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
+			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
+			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
+			common.BytesToAddress([]byte{4}): {Balance: big.NewInt(1)}, // Identity
+			common.BytesToAddress([]byte{5}): {Balance: big.NewInt(1)}, // ModExp
+			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
+			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
+			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
+			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
+			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+		},
+	}
 }
 
 // NewNetwork creates new test Ethereum network with PoS and inmemory DBs.
@@ -76,7 +106,7 @@ func NewNetwork() (*Network, error) {
 		}
 	}
 
-	genesis := core.DeveloperGenesisBlock(0, 11500000, base.Address)
+	genesis := minerTestGenesisBlock(0, 11500000, base.Address)
 	for _, acc := range preFund {
 		genesis.Alloc[acc.Address] = core.GenesisAccount{
 			Balance: new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether)),
@@ -114,7 +144,7 @@ func (network *Network) Accounts() []accounts.Account {
 
 // Dial creates new Ethereum client connected to in-process API handler.
 func (network *Network) Dial() *ethclient.Client {
-	rpcClient, _ := network.stack.Attach()
+	rpcClient := network.stack.Attach()
 	return ethclient.NewClient(rpcClient)
 }
 
@@ -184,8 +214,8 @@ func (network *Network) Start() error {
 		return err
 	}
 
-	network.ethereum.TxPool().SetGasPrice(big.NewInt(params.GWei))
-	return network.ethereum.StartMining(0)
+	network.ethereum.TxPool().SetGasTip(big.NewInt(params.GWei))
+	return network.ethereum.StartMining()
 }
 
 // Close stops the node and releases resources acquired in node constructor.
