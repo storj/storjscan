@@ -80,7 +80,7 @@ docker-compose up -d geth
 Initialize blockchain with data:
 
 ```
-#This requires at least go 1.18, but you can also download binaries from release page
+#This requires at least go 1.20, but you can also download binaries from release page
 go install github.com/elek/cethacea@latest
 export CETH_CHAIN=http://localhost:8545
 

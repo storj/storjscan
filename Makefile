@@ -25,7 +25,7 @@ help:
 
 ##@ Release/Private Jenkins/Build
 
-GO_VERSION ?= 1.18.8
+GO_VERSION ?= 1.20.6
 BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD | sed "s!/!-!g")
 
 ifeq (${BRANCH_NAME},main)
