@@ -5,6 +5,7 @@ package storjscan
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"strings"
 
@@ -128,14 +129,14 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	}
 
 	{ // tokens
-		token, err := blockchain.AddressFromHex(config.Tokens.Contract)
+		var endpoint tokens.EthEndpoint
+		err := json.Unmarshal([]byte(config.Tokens.Endpoint), &endpoint)
 		if err != nil {
 			return nil, err
 		}
 
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
-			config.Tokens.Endpoint,
-			token,
+			endpoint,
 			app.Blockchain.HeadersCache,
 			db.Wallets(),
 			app.TokenPrice.Service,

@@ -4,6 +4,7 @@
 package tokens_test
 
 import (
+	"encoding/json"
 	"math/big"
 	"testing"
 	"time"
@@ -113,9 +114,14 @@ func testPayments(t *testing.T, connStr string) {
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
+		jsonEndpoint := `{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}`
+		var ethEndpoint tokens.EthEndpoint
+		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoint)
+		require.NoError(t, err)
+
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, nil, tokenPrice, 100)
+		service := tokens.NewService(logger, ethEndpoint, cache, nil, tokenPrice, 100)
 
 		payments, err := service.Payments(ctx, accs[3].Address, 0)
 		require.NoError(t, err)
@@ -250,9 +256,14 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
+		jsonEndpoint := `{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}`
+		var ethEndpoint tokens.EthEndpoint
+		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoint)
+		require.NoError(t, err)
+
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, network.HTTPEndpoint(), tokenAddress, cache, db.Wallets(), tokenPrice, 100)
+		service := tokens.NewService(logger, ethEndpoint, cache, db.Wallets(), tokenPrice, 100)
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
@@ -306,8 +317,13 @@ func testAllPayments(t *testing.T, connStr string) {
 
 func TestPing(t *testing.T) {
 	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
-		service := tokens.NewService(zaptest.NewLogger(t), network.HTTPEndpoint(), tokenAddress, nil, nil, nil, 100)
-		err := service.Ping(ctx)
+		jsonEndpoint := `{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}`
+		var ethEndpoint tokens.EthEndpoint
+		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoint)
+		require.NoError(t, err)
+
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoint, nil, nil, nil, 100)
+		err = service.Ping(ctx)
 		require.NoError(t, err)
 	})
 }

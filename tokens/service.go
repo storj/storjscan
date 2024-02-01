@@ -23,10 +23,15 @@ import (
 // ErrService - tokens service error class.
 var ErrService = errs.Class("tokens service")
 
+// EthEndpoint contains the URL and contract address to access a chain API.
+type EthEndpoint struct {
+	URL      string
+	Contract string
+}
+
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoint string `help:"Ethereum RPC endpoint" devDefault:"http://localhost:8545" releaseDefault:"/home/storj/.ethereum/geth.ipc"`
-	Contract string `help:"Address of the STORJ token to scan for transactions" default:"0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac"`
+	Endpoint string `help:"RPC endpoint {URL:<URL>,Contract:<Contract Address>}" devDefault:"{'URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}" releaseDefault:"{'URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -34,8 +39,7 @@ type Config struct {
 // architecture: Service
 type Service struct {
 	log        *zap.Logger
-	endpoint   string
-	token      blockchain.Address
+	endpoint   EthEndpoint
 	headers    *blockchain.HeadersCache
 	walletDB   wallets.DB
 	tokenPrice *tokenprice.Service
@@ -45,8 +49,7 @@ type Service struct {
 // NewService creates new token service instance.
 func NewService(
 	log *zap.Logger,
-	endpoint string,
-	token blockchain.Address,
+	endpoint EthEndpoint,
 	cache *blockchain.HeadersCache,
 	walletDB wallets.DB,
 	tokenPrice *tokenprice.Service,
@@ -54,7 +57,6 @@ func NewService(
 	return &Service{
 		log:        log,
 		endpoint:   endpoint,
-		token:      token,
 		headers:    cache,
 		walletDB:   walletDB,
 		tokenPrice: tokenPrice,
@@ -67,13 +69,17 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
-	client, err := ethclient.DialContext(ctx, service.endpoint)
+	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
 
-	token, err := erc20.NewERC20(service.token, client)
+	contract, err := blockchain.AddressFromHex(service.endpoint.Contract)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
+	}
+	token, err := erc20.NewERC20(contract, client)
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
@@ -139,13 +145,16 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
-	client, err := ethclient.DialContext(ctx, service.endpoint)
+	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
-
-	token, err := erc20.NewERC20(service.token, client)
+	contract, err := blockchain.AddressFromHex(service.endpoint.Contract)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
+	}
+	token, err := erc20.NewERC20(contract, client)
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
@@ -215,7 +224,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 func (service *Service) Ping(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	client, err := ethclient.DialContext(ctx, service.endpoint)
+	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
 	if err != nil {
 		return err
 	}
