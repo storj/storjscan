@@ -60,6 +60,7 @@ func NewHeadersCache(log *zap.Logger, db HeadersDB) *HeadersCache {
 // Get retrieves block header from cache storage or fetches header from client and caches it.
 // TODO: remove direct dependency on go-eth client from public API.
 func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, hash Hash) (Header, error) {
+	headersCache.log.Debug("fetching header", zap.String("hash", hash.String()))
 	header, err := headersCache.db.Get(ctx, hash)
 	switch {
 	case err == nil:
@@ -75,6 +76,7 @@ func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Cli
 			Number:    ethHeader.Number.Int64(),
 			Timestamp: time.Unix(int64(ethHeader.Time), 0).UTC(),
 		}
+		headersCache.log.Debug("header not found: inserting new header", zap.String("hash", header.Hash.String()))
 		if err = headersCache.db.Insert(ctx, header.Hash, header.Number, header.Timestamp); err != nil {
 			return Header{}, err
 		}
