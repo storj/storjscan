@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"storj.io/common/currency"
 	"storj.io/common/testcontext"
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
@@ -27,7 +28,6 @@ import (
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokenprice/coinmarketcap"
-	"storj.io/storjscan/tokenprice/coinmarketcaptest"
 	"storj.io/storjscan/tokens"
 )
 
@@ -57,7 +57,7 @@ func testEndpoint(t *testing.T, connStr string) {
 
 		tokenPriceDB := db.TokenPrice()
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
@@ -118,13 +118,13 @@ func testEndpoint(t *testing.T, connStr string) {
 		require.NoError(t, err)
 
 		// fill token price DB.
-		const price = 2
+		price := currency.AmountFromBaseUnits(2000000, currency.USDollarsMicro)
 		firstBlock := network.Ethereum().BlockChain().GetBlockByNumber(1)
 
 		startTime := time.Unix(int64(firstBlock.Time()), 0).Add(-time.Minute)
 		for i := 0; i < 10; i++ {
 			window := startTime.Add(time.Duration(i) * time.Minute)
-			require.NoError(t, tokenPriceDB.Update(ctx, window, price))
+			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
 		// get payments of one wallet
@@ -180,8 +180,8 @@ func testEndpoint(t *testing.T, connStr string) {
 			require.NoError(t, err)
 			require.Equal(t, latestBlockHeader, payments.LatestBlock)
 			require.Equal(t, accounts[0].Address, payments.Payments[0].From)
-			require.EqualValues(t, 1000000, payments.Payments[0].TokenValue)
-			require.EqualValues(t, 1000000*price, payments.Payments[0].USDValue)
+			require.EqualValues(t, 1000000, payments.Payments[0].TokenValue.BaseUnits())
+			require.EqualValues(t, tokenprice.CalculateValue(currency.AmountFromBaseUnits(1000000, currency.StorjToken), price), payments.Payments[0].USDValue)
 			require.Equal(t, recpt.BlockHash, payments.Payments[0].BlockHash)
 			require.Equal(t, recpt.BlockNumber.Int64(), payments.Payments[0].BlockNumber)
 			require.Equal(t, tx.Hash(), payments.Payments[0].Transaction)
