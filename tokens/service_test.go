@@ -323,7 +323,7 @@ func TestPing(t *testing.T) {
 		require.NoError(t, err)
 
 		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
-		err = service.Ping(ctx)
+		err = service.PingAll(ctx)
 		require.NoError(t, err)
 	})
 }

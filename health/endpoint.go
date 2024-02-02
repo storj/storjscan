@@ -90,7 +90,7 @@ func (endpoint *Endpoint) Ready(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// test blockchain service
-	if err = endpoint.tokenService.Ping(ctx); err != nil {
+	if err = endpoint.tokenService.PingAll(ctx); err != nil {
 		message += "blockchain:failure\n"
 		mon.Event("health-blockchain-failure")
 		endpoint.log.Error(fmt.Sprintf("blockchain failure: %s\n", err.Error()))
