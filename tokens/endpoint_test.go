@@ -62,12 +62,12 @@ func testEndpoint(t *testing.T, connStr string) {
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 
-		jsonEndpoint := `{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}`
-		var ethEndpoint tokens.EthEndpoint
-		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoint)
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}]`
+		var ethEndpoints []tokens.EthEndpoint
+		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		service := tokens.NewService(logger.Named("service"), ethEndpoint, cache, db.Wallets(), tokenPrice, 100)
+		service := tokens.NewService(logger.Named("service"), ethEndpoints, cache, db.Wallets(), tokenPrice, 100)
 		paymentEndpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
 
 		apiServer := api.NewServer(logger, lis, map[string]string{"eu1": "eu1secret", "us1": "us1secret"})

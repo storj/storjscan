@@ -129,14 +129,14 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	}
 
 	{ // tokens
-		var endpoint tokens.EthEndpoint
-		err := json.Unmarshal([]byte(config.Tokens.Endpoint), &endpoint)
+		var endpoints []tokens.EthEndpoint
+		err := json.Unmarshal([]byte(config.Tokens.Endpoints), &endpoints)
 		if err != nil {
 			return nil, err
 		}
 
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
-			endpoint,
+			endpoints,
 			app.Blockchain.HeadersCache,
 			db.Wallets(),
 			app.TokenPrice.Service,

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
@@ -31,7 +32,7 @@ type EthEndpoint struct {
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoint string `help:"RPC endpoint {URL:<URL>,Contract:<Contract Address>}" devDefault:"{'URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}" releaseDefault:"{'URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}"`
+	Endpoints string `help:"List of RPC endpoints [{URL:<URL>,Contract:<Contract Address>},...]" devDefault:"[{'URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]" releaseDefault:"[{'URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -39,7 +40,7 @@ type Config struct {
 // architecture: Service
 type Service struct {
 	log        *zap.Logger
-	endpoint   EthEndpoint
+	endpoints  []EthEndpoint
 	headers    *blockchain.HeadersCache
 	walletDB   wallets.DB
 	tokenPrice *tokenprice.Service
@@ -49,14 +50,14 @@ type Service struct {
 // NewService creates new token service instance.
 func NewService(
 	log *zap.Logger,
-	endpoint EthEndpoint,
+	endpoints []EthEndpoint,
 	cache *blockchain.HeadersCache,
 	walletDB wallets.DB,
 	tokenPrice *tokenprice.Service,
 	batchSize int) *Service {
 	return &Service{
 		log:        log,
-		endpoint:   endpoint,
+		endpoints:  endpoints,
 		headers:    cache,
 		walletDB:   walletDB,
 		tokenPrice: tokenPrice,
@@ -69,57 +70,66 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
-	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	defer client.Close()
-
-	contract, err := blockchain.AddressFromHex(service.endpoint.Contract)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	token, err := erc20.NewERC20(contract, client)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-
-	opts := &bind.FilterOpts{
-		Start:   uint64(from),
-		End:     nil,
-		Context: ctx,
-	}
-	iter, err := token.FilterTransfer(opts, nil, []common.Address{address})
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	defer func() { err = errs.Combine(err, ErrService.Wrap(iter.Close())) }()
-
-	latestBlock, err := client.HeaderByNumber(ctx, nil)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-
-	var payments []Payment
-	for iter.Next() {
-		header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
+	var latestBlock *types.Header
+	var allPayments []Payment
+	for _, endpoint := range service.endpoints {
+		client, err := ethclient.DialContext(ctx, endpoint.URL)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
+		defer client.Close()
+
+		contract, err := blockchain.AddressFromHex(endpoint.Contract)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
+		}
+		token, err := erc20.NewERC20(contract, client)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
 
-		payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
-		service.log.Debug("found payment",
-			zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
-			zap.Int64("Block Number", payments[len(payments)-1].BlockNumber),
-			zap.Int("Log Index", payments[len(payments)-1].LogIndex),
-			zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
-		)
-	}
+		opts := &bind.FilterOpts{
+			Start:   uint64(from),
+			End:     nil,
+			Context: ctx,
+		}
+		iter, err := token.FilterTransfer(opts, nil, []common.Address{address})
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
+		}
+		defer func() { err = errs.Combine(err, ErrService.Wrap(iter.Close())) }()
 
+		if latestBlock == nil {
+			latestBlock, err = client.HeaderByNumber(ctx, nil)
+			if err != nil {
+				return LatestPayments{}, ErrService.Wrap(err)
+			}
+		}
+
+		var payments []Payment
+		for iter.Next() {
+			header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
+			if err != nil {
+				return LatestPayments{}, ErrService.Wrap(err)
+			}
+			price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
+			if err != nil {
+				return LatestPayments{}, ErrService.Wrap(err)
+			}
+
+			payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
+			service.log.Debug("found payment",
+				zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
+				zap.Int64("Block Number", payments[len(payments)-1].BlockNumber),
+				zap.Int("Log Index", payments[len(payments)-1].LogIndex),
+				zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
+			)
+		}
+		if iter.Error() != nil {
+			return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
+		}
+		allPayments = append(allPayments, payments...)
+	}
 	header := blockchain.Header{
 		Hash:      latestBlock.Hash(),
 		Number:    latestBlock.Number.Int64(),
@@ -127,8 +137,8 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	}
 	return LatestPayments{
 		LatestBlock: header,
-		Payments:    payments,
-	}, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
+		Payments:    allPayments,
+	}, nil
 }
 
 // AllPayments returns all the payments associated with the current satellite.
@@ -145,70 +155,76 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	if err != nil {
 		return LatestPayments{}, ErrService.Wrap(err)
 	}
-	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	defer client.Close()
-	contract, err := blockchain.AddressFromHex(service.endpoint.Contract)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	token, err := erc20.NewERC20(contract, client)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
-	latestBlock, err := client.HeaderByNumber(ctx, nil)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
 
+	var latestBlock *types.Header
 	var allPayments []Payment
-	allWallets := asList(walletsOfSatellite)
-	end := latestBlock.Number.Uint64()
+	for _, endPoint := range service.endpoints {
 
-	// query the rpc API in batches
-	for i := 0; i < len(allWallets); i += service.batchSize {
-		var addresses []blockchain.Address
-
-		for a := i; a-i < service.batchSize && a < len(allWallets); a++ {
-			addresses = append(addresses, allWallets[a])
+		client, err := ethclient.DialContext(ctx, endPoint.URL)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
-
-		opts := &bind.FilterOpts{
-			Start:   uint64(from),
-			End:     &end,
-			Context: ctx,
+		defer client.Close()
+		contract, err := blockchain.AddressFromHex(endPoint.Contract)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		iter, err := token.FilterTransfer(opts, nil, addresses)
+		token, err := erc20.NewERC20(contract, client)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
+		}
+		latestBlock, err = client.HeaderByNumber(ctx, nil)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
 
-		for iter.Next() {
-			header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
-			if err != nil {
-				return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
-			}
-			price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
-			if err != nil {
-				return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
+		var payments []Payment
+		allWallets := asList(walletsOfSatellite)
+		end := latestBlock.Number.Uint64()
+
+		// query the rpc API in batches
+		for i := 0; i < len(allWallets); i += service.batchSize {
+			var addresses []blockchain.Address
+
+			for a := i; a-i < service.batchSize && a < len(allWallets); a++ {
+				addresses = append(addresses, allWallets[a])
 			}
 
-			allPayments = append(allPayments, paymentFromEvent(iter.Event, header.Timestamp, price))
-			service.log.Debug("found payment",
-				zap.String("Transaction Hash", allPayments[len(allPayments)-1].Transaction.String()),
-				zap.Int64("Block Number", allPayments[len(allPayments)-1].BlockNumber),
-				zap.Int("Log Index", allPayments[len(allPayments)-1].LogIndex),
-				zap.String("USD Value", allPayments[len(allPayments)-1].USDValue.AsDecimal().String()),
-			)
-		}
+			opts := &bind.FilterOpts{
+				Start:   uint64(from),
+				End:     &end,
+				Context: ctx,
+			}
+			iter, err := token.FilterTransfer(opts, nil, addresses)
+			if err != nil {
+				return LatestPayments{}, ErrService.Wrap(err)
+			}
 
-		if err := errs.Combine(iter.Error(), iter.Close()); err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
+			for iter.Next() {
+				header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
+				if err != nil {
+					return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
+				}
+				price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
+				if err != nil {
+					return LatestPayments{}, ErrService.Wrap(errs.Combine(err, iter.Close()))
+				}
+
+				payments = append(payments, paymentFromEvent(iter.Event, header.Timestamp, price))
+				service.log.Debug("found payment",
+					zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
+					zap.Int64("Block Number", payments[len(payments)-1].BlockNumber),
+					zap.Int("Log Index", payments[len(payments)-1].LogIndex),
+					zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
+				)
+			}
+
+			if err := errs.Combine(iter.Error(), iter.Close()); err != nil {
+				return LatestPayments{}, ErrService.Wrap(err)
+			}
+			allPayments = append(allPayments, payments...)
 		}
 	}
-
 	header := blockchain.Header{
 		Hash:      latestBlock.Hash(),
 		Number:    latestBlock.Number.Int64(),
@@ -224,13 +240,18 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 func (service *Service) Ping(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
-	client, err := ethclient.DialContext(ctx, service.endpoint.URL)
-	if err != nil {
-		return err
+	for _, endpoint := range service.endpoints {
+		client, err := ethclient.DialContext(ctx, endpoint.URL)
+		if err != nil {
+			return ErrService.Wrap(err)
+		}
+		defer client.Close()
+		// check if service is reachable by getting the latest block
+		_, err = client.HeaderByNumber(ctx, nil)
+		if err != nil {
+			return ErrService.Wrap(err)
+		}
 	}
-	defer client.Close()
-	// check if service is reachable by getting the latest block
-	_, err = client.HeaderByNumber(ctx, nil)
 	return err
 }
 
