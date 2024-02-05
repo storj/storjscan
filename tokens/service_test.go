@@ -38,8 +38,9 @@ func TestPayments(t *testing.T) {
 }
 
 func testPayments(t *testing.T, connStr string) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, 1, 4, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
+		network := networks[0]
 
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
@@ -55,7 +56,7 @@ func testPayments(t *testing.T, connStr string) {
 		client := network.Dial()
 		defer client.Close()
 
-		tk, err := testtoken.NewTestToken(tokenAddress, client)
+		tk, err := testtoken.NewTestToken(network.TokenAddress(), client)
 		require.NoError(t, err)
 
 		accs := network.Accounts()
@@ -114,7 +115,7 @@ func testPayments(t *testing.T, connStr string) {
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
-		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}]`
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `"}]`
 		var ethEndpoints []tokens.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
@@ -158,8 +159,9 @@ func TestAllPayments(t *testing.T) {
 }
 
 func testAllPayments(t *testing.T, connStr string) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, 1, 10, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
+		network := networks[0]
 
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
@@ -175,7 +177,7 @@ func testAllPayments(t *testing.T, connStr string) {
 		client := network.Dial()
 		defer client.Close()
 
-		tk, err := testtoken.NewTestToken(tokenAddress, client)
+		tk, err := testtoken.NewTestToken(network.TokenAddress(), client)
 		require.NoError(t, err)
 
 		accs := network.Accounts()
@@ -256,7 +258,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
-		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}]`
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `"}]`
 		var ethEndpoints []tokens.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
@@ -316,8 +318,22 @@ func testAllPayments(t *testing.T, connStr string) {
 }
 
 func TestPing(t *testing.T) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
-		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}]`
+	testeth.Run(t, 1, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
+		network := networks[0]
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `"}]`
+		var ethEndpoints []tokens.EthEndpoint
+		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
+		require.NoError(t, err)
+
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
+		err = service.PingAll(ctx)
+		require.NoError(t, err)
+	})
+}
+
+func TestPingMultipleAPIEndpoints(t *testing.T) {
+	testeth.Run(t, 2, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
+		jsonEndpoint := `[{"URL": "` + networks[0].HTTPEndpoint() + `", "Contract": "` + networks[0].TokenAddress().Hex() + `"}, {"URL": "` + networks[1].HTTPEndpoint() + `", "Contract": "` + networks[1].TokenAddress().Hex() + `"}]`
 		var ethEndpoints []tokens.EthEndpoint
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)

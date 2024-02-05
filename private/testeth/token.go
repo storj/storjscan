@@ -7,19 +7,17 @@ import (
 	"context"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-
 	"storj.io/storjscan/private/testeth/testtoken"
 )
 
 // DeployToken deploys test token to provided network using coinbase account.
-func DeployToken(ctx context.Context, network *Network, supply int64) (common.Address, error) {
+func DeployToken(ctx context.Context, network *Network, supply int64) error {
 	client := network.Dial()
 	defer client.Close()
 
 	nonce, err := client.PendingNonceAt(ctx, network.developer.Address)
 	if err != nil {
-		return common.Address{}, err
+		return err
 	}
 
 	s, d := big.NewInt(supply), new(big.Int)
@@ -28,9 +26,13 @@ func DeployToken(ctx context.Context, network *Network, supply int64) (common.Ad
 
 	addr, tx, _, err := testtoken.DeployTestToken(network.TransactOptions(ctx, network.developer, int64(nonce)), client, s)
 	if err != nil {
-		return common.Address{}, err
+		return err
 	}
 
 	_, err = network.WaitForTx(ctx, tx.Hash())
-	return addr, err
+	if err != nil {
+		return err
+	}
+	network.token = addr
+	return nil
 }

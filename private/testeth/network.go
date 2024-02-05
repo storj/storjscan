@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/node"
@@ -32,6 +31,7 @@ type Network struct {
 	stack     *node.Node
 	keystore  *keystore.KeyStore
 	developer accounts.Account
+	token     common.Address
 }
 
 func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
@@ -64,21 +64,8 @@ func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 }
 
 // NewNetwork creates new test Ethereum network with PoS and inmemory DBs.
-func NewNetwork() (*Network, error) {
-	config := node.DefaultConfig
-	config.Name = "testeth"
-	config.DataDir = ""
-	config.HTTPHost = "127.0.0.1"
-	config.HTTPPort = 0
-	config.AuthPort = 0
-	config.HTTPModules = append(config.HTTPModules, "eth")
-	config.P2P.MaxPeers = 0
-	config.P2P.ListenAddr = ""
-	config.P2P.NoDial = true
-	config.P2P.NoDiscovery = true
-	config.P2P.DiscoveryV5 = false
-
-	stack, err := node.New(&config)
+func NewNetwork(nodeConfig node.Config, ethConfig ethconfig.Config, numAccounts int) (*Network, error) {
+	stack, err := node.New(&nodeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +80,7 @@ func NewNetwork() (*Network, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < 9; i++ {
+	for i := 1; i < numAccounts; i++ {
 		acc, err := ks.NewAccount("")
 		if err != nil {
 			return nil, err
@@ -106,21 +93,13 @@ func NewNetwork() (*Network, error) {
 		}
 	}
 
-	genesis := minerTestGenesisBlock(0, 11500000, base.Address)
+	ethConfig.Genesis = minerTestGenesisBlock(0, 11500000, base.Address)
 	for _, acc := range preFund {
-		genesis.Alloc[acc.Address] = core.GenesisAccount{
+		ethConfig.Genesis.Alloc[acc.Address] = core.GenesisAccount{
 			Balance: new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether)),
 		}
 	}
-
-	// eth config
-	ethConfig := ethconfig.Defaults
-	ethConfig.NetworkId = 1337
-	ethConfig.SyncMode = downloader.FullSync
-	ethConfig.Miner.GasPrice = big.NewInt(1)
 	ethConfig.Miner.Etherbase = base.Address
-	ethConfig.Genesis = genesis
-	ethConfig.FilterLogCacheSize = 100
 	backend, ethereum := utils.RegisterEthService(stack, &ethConfig)
 
 	utils.RegisterFilterAPI(stack, backend, &ethConfig)
@@ -156,6 +135,11 @@ func (network *Network) ChainID() *big.Int {
 // HTTPEndpoint returns HTTP RPC API endpoint address.
 func (network *Network) HTTPEndpoint() string {
 	return network.stack.HTTPEndpoint()
+}
+
+// TokenAddress returns address of deployed test token.
+func (network *Network) TokenAddress() common.Address {
+	return network.token
 }
 
 // TransactOptions creates new key store transaction opts for given account with provided nonce and context.

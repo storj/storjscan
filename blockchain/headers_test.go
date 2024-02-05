@@ -152,8 +152,9 @@ func TestHeadersCacheMissingHeader(t *testing.T) {
 }
 
 func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, 1, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
+		network := networks[0]
 
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {

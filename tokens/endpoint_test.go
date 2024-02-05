@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -41,9 +40,10 @@ func TestEndpoint(t *testing.T) {
 }
 
 func testEndpoint(t *testing.T, connStr string) {
-	testeth.Run(t, func(ctx *testcontext.Context, t *testing.T, tokenAddress common.Address, network *testeth.Network) {
+	testeth.Run(t, 1, 4, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
 
+		network := networks[0]
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
 			t.Fatal(err)
@@ -62,7 +62,7 @@ func testEndpoint(t *testing.T, connStr string) {
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 
-		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + tokenAddress.Hex() + `"}]`
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `"}]`
 		var ethEndpoints []tokens.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
@@ -80,7 +80,7 @@ func testEndpoint(t *testing.T, connStr string) {
 		client := network.Dial()
 		defer client.Close()
 
-		tk, err := testtoken.NewTestToken(tokenAddress, client)
+		tk, err := testtoken.NewTestToken(network.TokenAddress(), client)
 		require.NoError(t, err)
 
 		accounts := network.Accounts()
