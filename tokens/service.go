@@ -155,6 +155,32 @@ func ping(ctx context.Context, endpoint EthEndpoint) (err error) {
 	return err
 }
 
+// GetChainIds returns the chain ids of the currently configured endpoints.
+func (service *Service) GetChainIds(ctx context.Context) (chainIds []int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+	for _, endpoint := range service.endpoints {
+		chainId, err := getChainId(ctx, endpoint)
+		if err != nil {
+			return nil, ErrService.Wrap(err)
+		}
+		chainIds = append(chainIds, chainId)
+	}
+	return chainIds, nil
+}
+
+func getChainId(ctx context.Context, endpoint EthEndpoint) (int64, error) {
+	client, err := ethclient.DialContext(ctx, endpoint.URL)
+	if err != nil {
+		return 0, err
+	}
+	defer client.Close()
+	chainId, err := client.ChainID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return chainId.Int64(), nil
+}
+
 // retrievePaymentsForAddresses retrieves all ERC20 token payments for given addresses from start block to end block.
 // a nil end block means the latest block.
 func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoint EthEndpoint, addresses []common.Address, start int64, end *uint64) (_ []Payment, err error) {

@@ -331,6 +331,22 @@ func TestPing(t *testing.T) {
 	})
 }
 
+func TestChainIds(t *testing.T) {
+	testeth.Run(t, 2, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
+		jsonEndpoint := `[{"URL": "` + networks[0].HTTPEndpoint() + `", "Contract": "` + networks[0].TokenAddress().Hex() + `"}, {"URL": "` + networks[1].HTTPEndpoint() + `", "Contract": "` + networks[1].TokenAddress().Hex() + `"}]`
+		var ethEndpoints []tokens.EthEndpoint
+		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
+		require.NoError(t, err)
+
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
+		ids, err := service.GetChainIds(ctx)
+		require.Len(t, ids, 2)
+		require.Equal(t, networks[0].ChainID().Int64(), ids[0])
+		require.Equal(t, networks[1].ChainID().Int64(), ids[1])
+		require.NoError(t, err)
+	})
+}
+
 func TestPingMultipleAPIEndpoints(t *testing.T) {
 	testeth.Run(t, 2, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		jsonEndpoint := `[{"URL": "` + networks[0].HTTPEndpoint() + `", "Contract": "` + networks[0].TokenAddress().Hex() + `"}, {"URL": "` + networks[1].HTTPEndpoint() + `", "Contract": "` + networks[1].TokenAddress().Hex() + `"}]`

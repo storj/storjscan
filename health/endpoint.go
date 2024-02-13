@@ -47,11 +47,37 @@ func NewEndpoint(log *zap.Logger, db Pingable, tokenPrice *tokenprice.Service, t
 func (endpoint *Endpoint) Register(router *mux.Router) {
 	router.HandleFunc("/live", endpoint.Live).Methods(http.MethodGet)
 	router.HandleFunc("/ready", endpoint.Ready).Methods(http.MethodGet)
+	router.HandleFunc("/chain-ids", endpoint.chainIDs).Methods(http.MethodGet)
 }
 
 // Live checks if the storjscan service is running.
 func (endpoint *Endpoint) Live(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func (endpoint *Endpoint) chainIDs(w http.ResponseWriter, r *http.Request) {
+	var ctx context.Context
+	var err error
+	status := http.StatusOK
+	message := ""
+
+	// get chain ids
+	// TODO: allow for partial availability in status if only a subset of chains are available
+	if ids, err := endpoint.tokenService.GetChainIds(ctx); err != nil {
+		status = http.StatusServiceUnavailable
+		message += "get-chain-ids:failure\n"
+		mon.Event("chain-ids-failure")
+		endpoint.log.Error(fmt.Sprintf("chain ids failure: %s\n", err.Error()))
+	} else {
+		message += fmt.Sprintf("get-chain-ids:ok %d\n", ids)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(status)
+	_, err = w.Write([]byte(message))
+	if err != nil {
+		endpoint.log.Error(fmt.Sprintf("response writer error: %s\n", err.Error()))
+	}
 }
 
 // Ready checks whether the database connection is available and whether the token price and blockchain services are reachable.
