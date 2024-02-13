@@ -73,7 +73,7 @@ Dev blockchain can be started with the help of the included docker-compose file:
 Start the required services:
 
 ```
-docker-compose up -d db 
+docker-compose up -d db
 docker-compose up -d geth
 ```
 
@@ -158,7 +158,7 @@ storj-up local storjscan -d <path to binary>
 docker-compose up -d storjscan
 ```
 
-or 
+or
 
 ```
 ./scripts/cross-compile.sh
@@ -228,7 +228,7 @@ Transfer tokens to claimed wallet
 ```bash
 cethacea token transfer 1000 <address claimed above>
 ```
-note that only confirmed transfers will reflect in a users balance. TO confirm a transfer, it needs several transfers or other block chain transactions to occur after it. You cse a loop here to send several transfers at once i.e.
+note that only confirmed transfers will reflect in a users balance. To confirm a transfer, it needs several transfers or other block chain transactions to occur after it. You can use a loop here to send several transfers at once i.e.
 ```bash
 for i in {1..15}; do cethacea token transfer 1000 <address claimed above>; done
 ```
@@ -313,7 +313,7 @@ Prior to compiling token source code `openzeppelin` contract library should be i
 pushd contracts/
 npm install
 ./compile.sh
-popd 
+popd
 ```
 
 `TestToken` go contract bindings are located at `private/testeth` pkg.
@@ -355,4 +355,3 @@ If you get an error about not having enough tokens to deploy the contract, try e
 ```bash
 export CETH_ACCOUNT=2e9a0761ce9815b95b2389634f6af66abe5fec2b1e04b772728442b4c35ea365
 ```
-
