@@ -69,7 +69,7 @@ func (endpoint *Endpoint) chainIDs(w http.ResponseWriter, r *http.Request) {
 		mon.Event("chain-ids-failure")
 		endpoint.log.Error(fmt.Sprintf("chain ids failure: %s\n", err.Error()))
 	} else {
-		message += fmt.Sprintf("get-chain-ids:ok %d\n", ids)
+		message += fmt.Sprintf("get-chain-ids:ok %v\n", ids)
 	}
 
 	w.Header().Set("Content-Type", "text/plain")

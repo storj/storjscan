@@ -25,13 +25,14 @@ var ErrService = errs.Class("tokens service")
 
 // EthEndpoint contains the URL and contract address to access a chain API.
 type EthEndpoint struct {
+	Name     string
 	URL      string
 	Contract string
 }
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoints string `help:"List of RPC endpoints [{URL:<URL>,Contract:<Contract Address>},...]" devDefault:"[{'URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]" releaseDefault:"[{'URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]"`
+	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -156,14 +157,15 @@ func ping(ctx context.Context, endpoint EthEndpoint) (err error) {
 }
 
 // GetChainIds returns the chain ids of the currently configured endpoints.
-func (service *Service) GetChainIds(ctx context.Context) (chainIds []int64, err error) {
+func (service *Service) GetChainIds(ctx context.Context) (chainIds map[int64]string, err error) {
 	defer mon.Task()(&ctx)(&err)
+	chainIds = make(map[int64]string)
 	for _, endpoint := range service.endpoints {
 		chainId, err := getChainId(ctx, endpoint)
 		if err != nil {
 			return nil, ErrService.Wrap(err)
 		}
-		chainIds = append(chainIds, chainId)
+		chainIds[chainId] = endpoint.Name
 	}
 	return chainIds, nil
 }

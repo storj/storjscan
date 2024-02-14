@@ -34,13 +34,13 @@ type Network struct {
 	token     common.Address
 }
 
-func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
+func minerTestGenesisBlock(chainID, period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
 	config := *params.AllCliqueProtocolChanges
 	config.Clique = &params.CliqueConfig{
 		Period: period,
 		Epoch:  config.Clique.Epoch,
 	}
-
+	config.ChainID = big.NewInt(int64(chainID))
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &core.Genesis{
 		Config:     &config,
@@ -93,7 +93,7 @@ func NewNetwork(nodeConfig node.Config, ethConfig ethconfig.Config, numAccounts 
 		}
 	}
 
-	ethConfig.Genesis = minerTestGenesisBlock(0, 11500000, base.Address)
+	ethConfig.Genesis = minerTestGenesisBlock(ethConfig.NetworkId, 0, 11500000, base.Address)
 	for _, acc := range preFund {
 		ethConfig.Genesis.Alloc[acc.Address] = core.GenesisAccount{
 			Balance: new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether)),
