@@ -174,7 +174,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 
 	var payments []Payment
 	for iter.Next() {
-		header, err := service.headers.Get(ctx, client, iter.Event.Raw.BlockHash)
+		header, err := service.headers.Get(ctx, client, chainID.Int64(), iter.Event.Raw.BlockHash)
 		if err != nil {
 			return []Payment{{}}, ErrService.Wrap(err)
 		}

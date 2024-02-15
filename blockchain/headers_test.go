@@ -25,7 +25,12 @@ import (
 
 func TestHeadersDBInsert(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
-		err := db.Headers().Insert(ctx, blockchain.Hash{}, 0, time.Now().UTC())
+		err := db.Headers().Insert(ctx, blockchain.Header{
+			ChainID:   1337,
+			Hash:      blockchain.Hash{},
+			Number:    0,
+			Timestamp: time.Now().UTC(),
+		})
 		require.NoError(t, err)
 	})
 }
@@ -37,15 +42,16 @@ func TestHeadersDBDelete(t *testing.T) {
 		require.NoError(t, err)
 
 		header := blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    0,
 			Timestamp: time.Now().UTC(),
 		}
 
-		err = db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
+		err = db.Headers().Insert(ctx, header)
 		require.NoError(t, err)
 
-		err = db.Headers().Delete(ctx, header.Hash)
+		err = db.Headers().Delete(ctx, header.ChainID, header.Hash)
 		require.NoError(t, err)
 	})
 }
@@ -57,24 +63,27 @@ func TestHeadersDBGet(t *testing.T) {
 		require.NoError(t, err)
 
 		header := blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    1,
 			Timestamp: time.Now().Round(time.Microsecond).UTC(),
 		}
 
-		err = db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
+		err = db.Headers().Insert(ctx, header)
 		require.NoError(t, err)
 
 		t.Run("Get by hash", func(t *testing.T) {
-			dbHeader, err := db.Headers().Get(ctx, header.Hash)
+			dbHeader, err := db.Headers().Get(ctx, header.ChainID, header.Hash)
 			require.NoError(t, err)
+			require.Equal(t, header.ChainID, dbHeader.ChainID)
 			require.Equal(t, header.Hash, dbHeader.Hash)
 			require.Equal(t, header.Number, dbHeader.Number)
 			require.Equal(t, header.Timestamp, dbHeader.Timestamp)
 		})
 		t.Run("Get by number", func(t *testing.T) {
-			dbHeader, err := db.Headers().GetByNumber(ctx, header.Number)
+			dbHeader, err := db.Headers().GetByNumber(ctx, header.ChainID, header.Number)
 			require.NoError(t, err)
+			require.Equal(t, header.ChainID, dbHeader.ChainID)
 			require.Equal(t, header.Hash, dbHeader.Hash)
 			require.Equal(t, header.Number, dbHeader.Number)
 			require.Equal(t, header.Timestamp, dbHeader.Timestamp)
@@ -94,6 +103,7 @@ func TestHeadersDBList(t *testing.T) {
 			require.NoError(t, err)
 
 			header := blockchain.Header{
+				ChainID:   1337,
 				Hash:      blockchain.HashFromBytes(b),
 				Number:    i,
 				Timestamp: now.Add(time.Duration(i) * time.Minute),
@@ -102,7 +112,7 @@ func TestHeadersDBList(t *testing.T) {
 		}
 		// insert headers into db.
 		for _, header := range headers {
-			err := db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
+			err := db.Headers().Insert(ctx, header)
 			require.NoError(t, err)
 		}
 
@@ -114,6 +124,7 @@ func TestHeadersDBList(t *testing.T) {
 			return headers[i].Timestamp.After(headers[j].Timestamp)
 		})
 		for i, header := range headers {
+			require.Equal(t, header.ChainID, list[i].ChainID)
 			require.Equal(t, header.Hash, list[i].Hash)
 			require.Equal(t, header.Number, list[i].Number)
 			require.Equal(t, header.Timestamp, list[i].Timestamp)
@@ -125,17 +136,23 @@ func TestHeadersCache(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		logger := zaptest.NewLogger(t)
 		now := time.Now().Round(time.Microsecond).UTC()
-
+		chainID := int64(1337)
 		var hash blockchain.Hash
 		b := testrand.BytesInt(32)
 		copy(hash[:], b)
 
-		err := db.Headers().Insert(ctx, hash, 1, now)
+		err := db.Headers().Insert(ctx, blockchain.Header{
+			ChainID:   chainID,
+			Hash:      hash,
+			Number:    1,
+			Timestamp: now,
+		})
 		require.NoError(t, err)
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		header, err := cache.Get(ctx, &ethclient.Client{}, hash)
+		header, err := cache.Get(ctx, &ethclient.Client{}, chainID, hash)
 		require.NoError(t, err)
+		require.Equal(t, chainID, header.ChainID)
 		require.Equal(t, hash, header.Hash)
 		require.EqualValues(t, 1, header.Number)
 		require.Equal(t, now, header.Timestamp)
@@ -173,18 +190,22 @@ func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
 		fullHeader, err := client.HeaderByNumber(ctx, new(big.Int).SetInt64(1))
 		require.NoError(t, err)
 		hash := fullHeader.Hash()
+		chainID, err := client.ChainID(ctx)
+		require.NoError(t, err)
 		headerTime := time.Unix(int64(fullHeader.Time), 0).UTC()
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		header, err := cache.Get(ctx, client, hash)
+		header, err := cache.Get(ctx, client, chainID.Int64(), hash)
 		require.NoError(t, err)
+		require.Equal(t, chainID.Int64(), header.ChainID)
 		require.Equal(t, hash, header.Hash)
 		require.EqualValues(t, 1, header.Number)
 		require.Equal(t, headerTime, header.Timestamp)
 
 		// check that header was written to db
-		header, err = db.Headers().Get(ctx, hash)
+		header, err = db.Headers().Get(ctx, chainID.Int64(), hash)
 		require.NoError(t, err)
+		require.Equal(t, chainID.Int64(), header.ChainID)
 		require.Equal(t, hash, header.Hash)
 		require.EqualValues(t, 1, header.Number)
 		require.Equal(t, headerTime, header.Timestamp)

@@ -27,6 +27,7 @@ func TestChore(t *testing.T) {
 		_, err := rand.Read(b)
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    0,
 			Timestamp: currentTime,
@@ -34,6 +35,7 @@ func TestChore(t *testing.T) {
 		_, err = rand.Read(b)
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    1,
 			Timestamp: currentTime.AddDate(0, 0, -29),
@@ -41,6 +43,7 @@ func TestChore(t *testing.T) {
 		_, err = rand.Read(b)
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    2,
 			Timestamp: currentTime.AddDate(0, 0, -31),
@@ -48,20 +51,22 @@ func TestChore(t *testing.T) {
 		_, err = rand.Read(b)
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
+			ChainID:   1337,
 			Hash:      blockchain.HashFromBytes(b),
 			Number:    3,
 			Timestamp: currentTime.AddDate(-1, 0, 0),
 		})
 
 		for _, header := range headers {
-			err := db.Headers().Insert(ctx, header.Hash, header.Number, header.Timestamp)
+			err := db.Headers().Insert(ctx, header)
 			require.NoError(t, err)
 		}
 
 		// initially, all 4 headers in the cache
 		for _, header := range headers {
-			dbHeader, err := db.Headers().Get(ctx, header.Hash)
+			dbHeader, err := db.Headers().Get(ctx, header.ChainID, header.Hash)
 			require.NoError(t, err)
+			require.Equal(t, header.ChainID, dbHeader.ChainID)
 			require.Equal(t, header.Hash, dbHeader.Hash)
 			require.Equal(t, header.Timestamp, dbHeader.Timestamp.Local())
 		}
@@ -80,20 +85,22 @@ func TestChore(t *testing.T) {
 		chore.Loop.TriggerWait()
 
 		// after the chore, the entries newer than 30 days should be returned
-		dbHeader, err := db.Headers().Get(ctx, headers[0].Hash)
+		dbHeader, err := db.Headers().Get(ctx, headers[0].ChainID, headers[0].Hash)
 		require.NoError(t, err)
+		require.Equal(t, headers[0].ChainID, dbHeader.ChainID)
 		require.Equal(t, headers[0].Hash, dbHeader.Hash)
 		require.Equal(t, headers[0].Timestamp, dbHeader.Timestamp.Local())
-		dbHeader, err = db.Headers().Get(ctx, headers[1].Hash)
+		dbHeader, err = db.Headers().Get(ctx, headers[1].ChainID, headers[1].Hash)
 		require.NoError(t, err)
+		require.Equal(t, headers[1].ChainID, dbHeader.ChainID)
 		require.Equal(t, headers[1].Hash, dbHeader.Hash)
 		require.Equal(t, headers[1].Timestamp, dbHeader.Timestamp.Local())
 		// the entries older than 30 days should be gone
-		dbHeader, err = db.Headers().Get(ctx, headers[2].Hash)
+		dbHeader, err = db.Headers().Get(ctx, headers[2].ChainID, headers[2].Hash)
 		require.Error(t, err)
 		require.Equal(t, blockchain.ErrNoHeader, err)
 		require.Equal(t, blockchain.Header{}, dbHeader)
-		dbHeader, err = db.Headers().Get(ctx, headers[3].Hash)
+		dbHeader, err = db.Headers().Get(ctx, headers[3].ChainID, headers[3].Hash)
 		require.Error(t, err)
 		require.Equal(t, blockchain.ErrNoHeader, err)
 		require.Equal(t, blockchain.Header{}, dbHeader)

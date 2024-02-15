@@ -208,6 +208,24 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					`ALTER TABLE token_prices ADD COLUMN price bigint NOT NULL;`,
 				},
 			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Delete existing block headers and add chain ID column",
+				Version:     6,
+				Action: migrate.SQL{
+					`TRUNCATE TABLE block_headers;`,
+					`ALTER TABLE block_headers ADD COLUMN chain_id bigint NOT NULL;`,
+				},
+			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Add chain ID column to primary key for block headers table",
+				Version:     7,
+				Action: migrate.SQL{
+					`ALTER TABLE block_headers DROP CONSTRAINT block_headers_pkey;`,
+					`ALTER TABLE block_headers ADD CONSTRAINT block_headers_pkey PRIMARY KEY ( chain_id, hash );`,
+				},
+			},
 		},
 	}
 }

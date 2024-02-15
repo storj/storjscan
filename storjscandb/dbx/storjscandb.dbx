@@ -1,6 +1,7 @@
 model block_header (
-	key hash
+	key chain_id hash
 
+	field chain_id   int64
 	field hash       blob
 	field number     int64
 	field timestamp  timestamp
@@ -8,7 +9,10 @@ model block_header (
 )
 
 create block_header ( )
-delete block_header ( where block_header.hash = ? )
+delete block_header (
+	where block_header.chain_id = ?
+	where block_header.hash = ?
+)
 delete block_header ( where block_header.timestamp < ? )
 
 read all (
@@ -18,11 +22,13 @@ read all (
 
 read one (
 	select block_header
+	where block_header.chain_id = ?
 	where block_header.hash = ?
 )
 
 read one (
 	select block_header
+	where block_header.chain_id = ?
 	where block_header.number = ?
 )
 
