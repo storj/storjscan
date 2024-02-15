@@ -20,6 +20,7 @@ var (
 // Header holds ethereum blockchain block header indexed data.
 // No need to keep number as big.Int right now as block count on ethereum mainnet is far from overflowing int64 capacity.
 type Header struct {
+	ChainID   int64
 	Hash      Hash
 	Number    int64
 	Timestamp time.Time

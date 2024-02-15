@@ -16,6 +16,7 @@ var mon = monkit.Package()
 
 // Payment is on chain payment made for particular contract and deposit wallet.
 type Payment struct {
+	ChainID     int64
 	From        blockchain.Address
 	To          blockchain.Address
 	TokenValue  currency.Amount
@@ -29,6 +30,6 @@ type Payment struct {
 
 // LatestPayments contains latest payments and latest chain block header.
 type LatestPayments struct {
-	LatestBlock blockchain.Header
-	Payments    []Payment
+	LatestBlocks []blockchain.Header
+	Payments     []Payment
 }

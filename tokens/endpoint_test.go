@@ -174,7 +174,10 @@ func testEndpoint(t *testing.T, connStr string) {
 
 			currentHead, err := client.HeaderByNumber(ctx, nil)
 			require.NoError(t, err)
+			chainID, err := client.ChainID(ctx)
+			require.NoError(t, err)
 			latestBlockHeader := blockchain.Header{
+				ChainID:   chainID.Int64(),
 				Hash:      currentHead.Hash(),
 				Number:    currentHead.Number.Int64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
@@ -183,7 +186,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			var payments tokens.LatestPayments
 			err = json.NewDecoder(resp.Body).Decode(&payments)
 			require.NoError(t, err)
-			require.Equal(t, latestBlockHeader, payments.LatestBlock)
+			require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
 			require.Equal(t, accounts[0].Address, payments.Payments[0].From)
 			require.EqualValues(t, 1000000, payments.Payments[0].TokenValue.BaseUnits())
 			require.EqualValues(t, tokenprice.CalculateValue(currency.AmountFromBaseUnits(1000000, currency.StorjToken), price), payments.Payments[0].USDValue)
@@ -213,7 +216,10 @@ func testEndpoint(t *testing.T, connStr string) {
 
 			currentHead, err := client.HeaderByNumber(ctx, nil)
 			require.NoError(t, err)
+			chainID, err := client.ChainID(ctx)
+			require.NoError(t, err)
 			latestBlockHeader := blockchain.Header{
+				ChainID:   chainID.Int64(),
 				Hash:      currentHead.Hash(),
 				Number:    currentHead.Number.Int64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
@@ -222,7 +228,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			var payments tokens.LatestPayments
 			err = json.NewDecoder(resp.Body).Decode(&payments)
 			require.NoError(t, err)
-			require.Equal(t, latestBlockHeader, payments.LatestBlock)
+			require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
 			require.Len(t, payments.Payments, 2)
 			require.Equal(t, accounts[2].Address, payments.Payments[0].To)
 		})

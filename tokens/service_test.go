@@ -129,13 +129,16 @@ func testPayments(t *testing.T, connStr string) {
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
+		chainID, err := client.ChainID(ctx)
+		require.NoError(t, err)
 		latestBlockHeader := blockchain.Header{
+			ChainID:   chainID.Int64(),
 			Hash:      currentHead.Hash(),
 			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
 		}
 
-		require.Equal(t, latestBlockHeader, payments.LatestBlock)
+		require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
 
 		for i, payment := range payments.Payments {
 			testPayment := testPayments[i]
@@ -269,7 +272,10 @@ func testAllPayments(t *testing.T, connStr string) {
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
+		chainID, err := client.ChainID(ctx)
+		require.NoError(t, err)
 		latestBlockHeader := blockchain.Header{
+			ChainID:   chainID.Int64(),
 			Hash:      currentHead.Hash(),
 			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
@@ -280,7 +286,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.NoError(t, err)
 
 			// 4 transactions out of 6
-			require.Equal(t, latestBlockHeader, payments.LatestBlock)
+			require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
 			require.Equal(t, 4, len(payments.Payments))
 
 			a1 := currency.AmountFromBaseUnits(testPayments[1].Amount, currency.StorjToken)
@@ -303,7 +309,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			require.NoError(t, err)
 
 			// 2 transactions out of 6
-			require.Equal(t, latestBlockHeader, payments.LatestBlock)
+			require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
 			require.Equal(t, 2, len(payments.Payments))
 
 			a4 := currency.AmountFromBaseUnits(testPayments[4].Amount, currency.StorjToken)
