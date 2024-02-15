@@ -73,10 +73,16 @@ func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Cli
 		}
 
 		header := Header{
+			// Note: we are using the provided hash here instead of what was fetched/computed by geth. This is done
+			// to allow support for additional blockchains that do not adhere strictly to the Ethereum block header
+			// format.
+			Hash:      hash,
 			ChainID:   chainID,
-			Hash:      ethHeader.Hash(),
 			Number:    ethHeader.Number.Int64(),
 			Timestamp: time.Unix(int64(ethHeader.Time), 0).UTC(),
+		}
+		if chainID == 1 && ethHeader.Hash() != hash {
+			headersCache.log.Warn("ethereum header hash mismatch! geth library may be out of date.", zap.String("geth hash", ethHeader.Hash().String()), zap.String("node hash", hash.String()))
 		}
 		headersCache.log.Debug("header not found: inserting new header", zap.Int64("Chain ID", header.ChainID), zap.String("hash", header.Hash.String()))
 		if err = headersCache.db.Insert(ctx, header); err != nil {
