@@ -65,19 +65,23 @@ func NewService(
 	}
 }
 
-// Payments retrieves all ERC20 token payments starting from particular block for ethereum address.
-func (service *Service) Payments(ctx context.Context, address blockchain.Address, from int64) (_ LatestPayments, err error) {
+// Payments retrieves all ERC20 token payments across all configured endpoints starting from a particular block per chain for ethereum address.
+func (service *Service) Payments(ctx context.Context, address blockchain.Address, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
+		chain, err := getChainId(ctx, endpoint)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
+		}
 		latestBlock, err := getCurrentLatestBlock(ctx, endpoint)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, []common.Address{address}, from, uint64(latestBlock.Number))
+		payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, []common.Address{address}, from[chain], uint64(latestBlock.Number))
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
@@ -91,8 +95,8 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	}, nil
 }
 
-// AllPayments returns all the payments associated with the current satellite.
-func (service *Service) AllPayments(ctx context.Context, satelliteID string, from int64) (_ LatestPayments, err error) {
+// AllPayments returns all the payments across all configured endpoints starting from a particular block per chain associated with the current satellite.
+func (service *Service) AllPayments(ctx context.Context, satelliteID string, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for satellite", zap.String("satelliteID", satelliteID))
 
@@ -109,6 +113,10 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
+		chain, err := getChainId(ctx, endpoint)
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
+		}
 		latestBlock, err := getCurrentLatestBlock(ctx, endpoint)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
@@ -121,7 +129,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 				addresses = append(addresses, allWallets[a])
 			}
 
-			payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, addresses, from, uint64(latestBlock.Number))
+			payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, addresses, from[chain], uint64(latestBlock.Number))
 			if err != nil {
 				return LatestPayments{}, ErrService.Wrap(err)
 			}

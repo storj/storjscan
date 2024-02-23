@@ -124,7 +124,7 @@ func testPayments(t *testing.T, connStr string) {
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 		service := tokens.NewService(logger, ethEndpoints, cache, nil, tokenPrice, 100)
 
-		payments, err := service.Payments(ctx, accs[3].Address, 0)
+		payments, err := service.Payments(ctx, accs[3].Address, nil)
 		require.NoError(t, err)
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
@@ -282,7 +282,7 @@ func testAllPayments(t *testing.T, connStr string) {
 		}
 
 		t.Run("eu1 from block 0", func(t *testing.T) {
-			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", 1)
+			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[int64]int64{1337: 1})
 			require.NoError(t, err)
 
 			// 4 transactions out of 6
@@ -305,7 +305,7 @@ func testAllPayments(t *testing.T, connStr string) {
 
 		})
 		t.Run("eu1 with specified block", func(t *testing.T) {
-			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", testPayments[4].BlockNumber)
+			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[int64]int64{1337: testPayments[4].BlockNumber})
 			require.NoError(t, err)
 
 			// 2 transactions out of 6
