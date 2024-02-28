@@ -55,17 +55,16 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chainIds, err := endpoint.service.GetChainIds(ctx)
 	from := map[int64]int64{}
-	for chainID := range chainIds {
-		from[chainID] = 0
-		if s := r.URL.Query().Get(strconv.FormatInt(chainID, 10)); s != "" {
+	for _, ethEndpoint := range endpoint.service.endpoints {
+		from[ethEndpoint.ChainID] = 0
+		if s := r.URL.Query().Get(strconv.FormatInt(ethEndpoint.ChainID, 10)); s != "" {
 			block, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 				return
 			}
-			from[chainID] = block
+			from[ethEndpoint.ChainID] = block
 		}
 	}
 
@@ -88,17 +87,16 @@ func (endpoint *Endpoint) AllPayments(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
 
-	chainIds, err := endpoint.service.GetChainIds(ctx)
 	from := map[int64]int64{}
-	for chainID := range chainIds {
-		from[chainID] = 0
-		if s := r.URL.Query().Get(strconv.FormatInt(chainID, 10)); s != "" {
+	for _, ethEndpoint := range endpoint.service.endpoints {
+		from[ethEndpoint.ChainID] = 0
+		if s := r.URL.Query().Get(strconv.FormatInt(ethEndpoint.ChainID, 10)); s != "" {
 			block, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 				return
 			}
-			from[chainID] = block
+			from[ethEndpoint.ChainID] = block
 		}
 	}
 

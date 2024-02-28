@@ -62,7 +62,6 @@ func (endpoint *Endpoint) chainIDs(w http.ResponseWriter, r *http.Request) {
 	message := ""
 
 	// get chain ids
-	// TODO: allow for partial availability in status if only a subset of chains are available
 	if ids, err := endpoint.tokenService.GetChainIds(ctx); err != nil {
 		status = http.StatusServiceUnavailable
 		message += "get-chain-ids:failure\n"

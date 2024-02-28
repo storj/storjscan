@@ -25,14 +25,15 @@ var ErrService = errs.Class("tokens service")
 
 // EthEndpoint contains the URL and contract address to access a chain API.
 type EthEndpoint struct {
-	Name     string
-	URL      string
-	Contract string
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Contract string `json:"contract"`
+	ChainID  int64  `json:"chainId,string,omitempty"`
 }
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac'}]"`
+	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1'}]"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -73,7 +74,6 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
-		chain, err := getChainId(ctx, endpoint)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
@@ -81,7 +81,7 @@ func (service *Service) Payments(ctx context.Context, address blockchain.Address
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, []common.Address{address}, from[chain], uint64(latestBlock.Number))
+		payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, []common.Address{address}, from[endpoint.ChainID], uint64(latestBlock.Number))
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
@@ -113,7 +113,6 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
-		chain, err := getChainId(ctx, endpoint)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
@@ -129,7 +128,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 				addresses = append(addresses, allWallets[a])
 			}
 
-			payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, addresses, from[chain], uint64(latestBlock.Number))
+			payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, addresses, from[endpoint.ChainID], uint64(latestBlock.Number))
 			if err != nil {
 				return LatestPayments{}, ErrService.Wrap(err)
 			}
@@ -259,26 +258,9 @@ func (service *Service) GetChainIds(ctx context.Context) (chainIds map[int64]str
 	defer mon.Task()(&ctx)(&err)
 	chainIds = make(map[int64]string)
 	for _, endpoint := range service.endpoints {
-		chainId, err := getChainId(ctx, endpoint)
-		if err != nil {
-			return nil, ErrService.Wrap(err)
-		}
-		chainIds[chainId] = endpoint.Name
+		chainIds[endpoint.ChainID] = endpoint.Name
 	}
 	return chainIds, nil
-}
-
-func getChainId(ctx context.Context, endpoint EthEndpoint) (int64, error) {
-	client, err := ethclient.DialContext(ctx, endpoint.URL)
-	if err != nil {
-		return 0, err
-	}
-	defer client.Close()
-	chainId, err := client.ChainID(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return chainId.Int64(), nil
 }
 
 func paymentFromEvent(chainID int64, event *erc20.ERC20Transfer, timestamp time.Time, price currency.Amount) Payment {
