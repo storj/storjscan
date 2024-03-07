@@ -172,6 +172,7 @@ func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
 	testeth.Run(t, 1, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		network := networks[0]
+		chainID := network.ChainID().Int64()
 
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
@@ -190,22 +191,21 @@ func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
 		fullHeader, err := client.HeaderByNumber(ctx, new(big.Int).SetInt64(1))
 		require.NoError(t, err)
 		hash := fullHeader.Hash()
-		chainID, err := client.ChainID(ctx)
 		require.NoError(t, err)
 		headerTime := time.Unix(int64(fullHeader.Time), 0).UTC()
 
 		cache := blockchain.NewHeadersCache(logger, db.Headers())
-		header, err := cache.Get(ctx, client, chainID.Int64(), hash)
+		header, err := cache.Get(ctx, client, chainID, hash)
 		require.NoError(t, err)
-		require.Equal(t, chainID.Int64(), header.ChainID)
+		require.Equal(t, chainID, header.ChainID)
 		require.Equal(t, hash, header.Hash)
 		require.EqualValues(t, 1, header.Number)
 		require.Equal(t, headerTime, header.Timestamp)
 
 		// check that header was written to db
-		header, err = db.Headers().Get(ctx, chainID.Int64(), hash)
+		header, err = db.Headers().Get(ctx, chainID, hash)
 		require.NoError(t, err)
-		require.Equal(t, chainID.Int64(), header.ChainID)
+		require.Equal(t, chainID, header.ChainID)
 		require.Equal(t, hash, header.Hash)
 		require.EqualValues(t, 1, header.Number)
 		require.Equal(t, headerTime, header.Timestamp)

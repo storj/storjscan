@@ -116,7 +116,7 @@ func testPayments(t *testing.T, connStr string) {
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
 
-		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `"}]`
+		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
 		var ethEndpoints []tokens.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
@@ -130,10 +130,9 @@ func testPayments(t *testing.T, connStr string) {
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
-		chainID, err := client.ChainID(ctx)
 		require.NoError(t, err)
 		latestBlockHeader := blockchain.Header{
-			ChainID:   chainID.Int64(),
+			ChainID:   ethEndpoints[0].ChainID,
 			Hash:      currentHead.Hash(),
 			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
@@ -273,10 +272,9 @@ func testAllPayments(t *testing.T, connStr string) {
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
-		chainID, err := client.ChainID(ctx)
 		require.NoError(t, err)
 		latestBlockHeader := blockchain.Header{
-			ChainID:   chainID.Int64(),
+			ChainID:   ethEndpoints[0].ChainID,
 			Hash:      currentHead.Hash(),
 			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),

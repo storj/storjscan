@@ -152,7 +152,6 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 	}
 	defer client.Close()
 
-	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return []Payment{{}}, ErrService.Wrap(err)
 	}
@@ -181,7 +180,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 
 	var payments []Payment
 	for iter.Next() {
-		header, err := service.headers.Get(ctx, client, chainID.Int64(), iter.Event.Raw.BlockHash)
+		header, err := service.headers.Get(ctx, client, endpoint.ChainID, iter.Event.Raw.BlockHash)
 		if err != nil {
 			return []Payment{{}}, ErrService.Wrap(err)
 		}
@@ -190,7 +189,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 			return []Payment{{}}, ErrService.Wrap(err)
 		}
 
-		payments = append(payments, paymentFromEvent(chainID.Int64(), iter.Event, header.Timestamp, price))
+		payments = append(payments, paymentFromEvent(endpoint.ChainID, iter.Event, header.Timestamp, price))
 		service.log.Debug("found payment",
 			zap.Int64("Chain ID", payments[len(payments)-1].ChainID),
 			zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
@@ -209,7 +208,6 @@ func getCurrentLatestBlock(ctx context.Context, endpoint EthEndpoint) (_ blockch
 	}
 	defer client.Close()
 
-	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return blockchain.Header{}, ErrService.Wrap(err)
 	}
@@ -219,7 +217,7 @@ func getCurrentLatestBlock(ctx context.Context, endpoint EthEndpoint) (_ blockch
 		return blockchain.Header{}, ErrService.Wrap(err)
 	}
 	return blockchain.Header{
-		ChainID:   chainID.Int64(),
+		ChainID:   endpoint.ChainID,
 		Hash:      latestBlock.Hash(),
 		Number:    latestBlock.Number.Int64(),
 		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),

@@ -174,10 +174,9 @@ func testEndpoint(t *testing.T, connStr string) {
 
 			currentHead, err := client.HeaderByNumber(ctx, nil)
 			require.NoError(t, err)
-			chainID, err := client.ChainID(ctx)
 			require.NoError(t, err)
 			latestBlockHeader := blockchain.Header{
-				ChainID:   chainID.Int64(),
+				ChainID:   ethEndpoints[0].ChainID,
 				Hash:      currentHead.Hash(),
 				Number:    currentHead.Number.Int64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
@@ -216,10 +215,9 @@ func testEndpoint(t *testing.T, connStr string) {
 
 			currentHead, err := client.HeaderByNumber(ctx, nil)
 			require.NoError(t, err)
-			chainID, err := client.ChainID(ctx)
 			require.NoError(t, err)
 			latestBlockHeader := blockchain.Header{
-				ChainID:   chainID.Int64(),
+				ChainID:   ethEndpoints[0].ChainID,
 				Hash:      currentHead.Hash(),
 				Number:    currentHead.Number.Int64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
