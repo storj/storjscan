@@ -231,8 +231,8 @@ func generate(cmd *cobra.Command, args []string) (err error) {
 		return errs.Wrap(err)
 	}
 
-	for addr, info := range addresses {
-		err = w.Write([]string{addr.String(), info})
+	for _, addr := range addresses {
+		err = w.Write([]string{addr.Address.String(), addr.Info})
 		if err != nil {
 			return errs.Wrap(err)
 		}
