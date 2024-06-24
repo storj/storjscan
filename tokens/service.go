@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
 	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/tokens/erc20"
 	"storj.io/storjscan/wallets"
@@ -67,7 +67,7 @@ func NewService(
 }
 
 // Payments retrieves all ERC20 token payments across all configured endpoints starting from a particular block per chain for ethereum address.
-func (service *Service) Payments(ctx context.Context, address blockchain.Address, from map[int64]int64) (_ LatestPayments, err error) {
+func (service *Service) Payments(ctx context.Context, address common.Address, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 
@@ -122,7 +122,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 		}
 		// query the rpc API in batches
 		for i := 0; i < len(allWallets); i += service.batchSize {
-			var addresses []blockchain.Address
+			var addresses []common.Address
 
 			for a := i; a-i < service.batchSize && a < len(allWallets); a++ {
 				addresses = append(addresses, allWallets[a])
@@ -162,7 +162,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 		Context: ctx,
 	}
 
-	contract, err := blockchain.AddressFromHex(endpoint.Contract)
+	contract, err := common.AddressFromHex(endpoint.Contract)
 	if err != nil {
 		return []Payment{{}}, ErrService.Wrap(err)
 	}
@@ -277,7 +277,7 @@ func paymentFromEvent(chainID int64, event *erc20.ERC20Transfer, timestamp time.
 	}
 }
 
-func asList(addresses map[blockchain.Address]string) (res []blockchain.Address) {
+func asList(addresses map[common.Address]string) (res []common.Address) {
 	for k := range addresses {
 		res = append(res, k)
 	}

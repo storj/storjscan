@@ -9,7 +9,7 @@ import (
 
 	"github.com/zeebo/errs"
 
-	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/wallets"
 )
@@ -28,7 +28,7 @@ type walletsDB struct {
 }
 
 // Insert adds a new entry in the wallets table. Info can be an empty string.
-func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address blockchain.Address, info string) (*wallets.Wallet, error) {
+func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address common.Address, info string) (*wallets.Wallet, error) {
 	_, err := wdb.db.Exec(ctx, wdb.db.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
-	addr, err := blockchain.AddressFromBytes(dbxw.Address)
+	addr, err := common.AddressFromBytes(dbxw.Address)
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
 	}
@@ -97,7 +97,7 @@ func (wdb *walletsDB) Claim(ctx context.Context, satellite string) (*wallets.Wal
 }
 
 // Get queries the wallets table for the information stored for a given address.
-func (wdb *walletsDB) Get(ctx context.Context, satellite string, address blockchain.Address) (*wallets.Wallet, error) {
+func (wdb *walletsDB) Get(ctx context.Context, satellite string, address common.Address) (*wallets.Wallet, error) {
 	w, err := wdb.db.Get_Wallet_By_Address_And_Satellite(ctx, dbx.Wallet_Address(address.Bytes()), dbx.Wallet_Satellite(satellite))
 	if err != nil {
 		return nil, ErrWalletsDB.Wrap(err)
@@ -134,15 +134,15 @@ func (wdb *walletsDB) GetStats(ctx context.Context) (stats *wallets.Stats, err e
 }
 
 // ListBySatellite returns addresses claimed by a certain satellite.
-func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (map[blockchain.Address]string, error) {
-	var accounts = make(map[blockchain.Address]string)
+func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (map[common.Address]string, error) {
+	var accounts = make(map[common.Address]string)
 	rows, err := wdb.db.All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx, dbx.Wallet_Satellite(satellite))
 	if err != nil {
 		return accounts, ErrWalletsDB.Wrap(err)
 	}
 	var errList error
 	for _, r := range rows {
-		addr, err := blockchain.AddressFromBytes(r.Address)
+		addr, err := common.AddressFromBytes(r.Address)
 		if err != nil {
 			errList = errs.Combine(errList, ErrWalletsDB.Wrap(err))
 			continue

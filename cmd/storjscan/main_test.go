@@ -12,12 +12,12 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
 	"storj.io/storjscan/api"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/wallets"
 )

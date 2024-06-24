@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/storjscan/api"
-	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 )
 
 // ErrEndpoint - tokens endpoint error class.
@@ -49,7 +49,7 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 
 	addressHex := mux.Vars(r)["address"]
 
-	address, err := blockchain.AddressFromHex(addressHex)
+	address, err := common.AddressFromHex(addressHex)
 	if err != nil {
 		api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 		return

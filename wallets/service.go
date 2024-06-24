@@ -10,7 +10,7 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
-	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 )
 
 var mon = monkit.Package()
@@ -42,18 +42,18 @@ func NewService(log *zap.Logger, db DB) (*Service, error) {
 }
 
 // Claim claims the next unclaimed deposit address.
-func (service *Service) Claim(ctx context.Context, satellite string) (_ blockchain.Address, err error) {
+func (service *Service) Claim(ctx context.Context, satellite string) (_ common.Address, err error) {
 	defer mon.Task()(&ctx)(&err)
 	wallet, err := service.db.Claim(ctx, satellite)
 	if err != nil {
-		return blockchain.Address{}, ErrWalletsService.Wrap(err)
+		return common.Address{}, ErrWalletsService.Wrap(err)
 	}
 	service.log.Debug("new wallet claimed")
 	return wallet.Address, nil
 }
 
 // Get returns information related to an address.
-func (service *Service) Get(ctx context.Context, satellite string, address blockchain.Address) (*Wallet, error) {
+func (service *Service) Get(ctx context.Context, satellite string, address common.Address) (*Wallet, error) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
 	a, err := service.db.Get(ctx, satellite, address)
@@ -72,7 +72,7 @@ func (service *Service) GetStats(ctx context.Context) (*Stats, error) {
 }
 
 // ListBySatellite returns accounts claimed by a certain satellite. Returns map[address]info.
-func (service *Service) ListBySatellite(ctx context.Context, satellite string) (map[blockchain.Address]string, error) {
+func (service *Service) ListBySatellite(ctx context.Context, satellite string) (map[common.Address]string, error) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
 	accounts, err := service.db.ListBySatellite(ctx, satellite)

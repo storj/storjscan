@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/blockchain/cleanup"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 )
 
@@ -28,7 +28,7 @@ func TestChore(t *testing.T) {
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    0,
 			Timestamp: currentTime,
 		})
@@ -36,7 +36,7 @@ func TestChore(t *testing.T) {
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    1,
 			Timestamp: currentTime.AddDate(0, 0, -29),
 		})
@@ -44,7 +44,7 @@ func TestChore(t *testing.T) {
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    2,
 			Timestamp: currentTime.AddDate(0, 0, -31),
 		})
@@ -52,7 +52,7 @@ func TestChore(t *testing.T) {
 		require.NoError(t, err)
 		headers = append(headers, blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    3,
 			Timestamp: currentTime.AddDate(-1, 0, 0),
 		})

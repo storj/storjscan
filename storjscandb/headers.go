@@ -11,6 +11,7 @@ import (
 	"github.com/zeebo/errs"
 
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/storjscandb/dbx"
 )
 
@@ -42,7 +43,7 @@ func (headers *headersDB) Insert(ctx context.Context, header blockchain.Header) 
 }
 
 // Delete deletes block header from the db by block hash.
-func (headers *headersDB) Delete(ctx context.Context, chainID int64, hash blockchain.Hash) error {
+func (headers *headersDB) Delete(ctx context.Context, chainID int64, hash common.Hash) error {
 	if chainID == 0 {
 		return ErrHeadersDB.New("invalid chainID 0 specified")
 	}
@@ -65,7 +66,7 @@ func (headers *headersDB) DeleteBefore(ctx context.Context, before time.Time) (e
 }
 
 // Get retrieves single block header from the db by block hash.
-func (headers *headersDB) Get(ctx context.Context, chainID int64, hash blockchain.Hash) (blockchain.Header, error) {
+func (headers *headersDB) Get(ctx context.Context, chainID int64, hash common.Hash) (blockchain.Header, error) {
 	if chainID == 0 {
 		return blockchain.Header{}, ErrHeadersDB.New("invalid chainID 0 specified")
 	}
@@ -121,7 +122,7 @@ func (headers *headersDB) List(ctx context.Context) ([]blockchain.Header, error)
 func fromDBXHeader(dbxHeader *dbx.BlockHeader) blockchain.Header {
 	return blockchain.Header{
 		ChainID:   dbxHeader.ChainId,
-		Hash:      blockchain.HashFromBytes(dbxHeader.Hash),
+		Hash:      common.HashFromBytes(dbxHeader.Hash),
 		Number:    dbxHeader.Number,
 		Timestamp: dbxHeader.Timestamp.UTC(),
 	}

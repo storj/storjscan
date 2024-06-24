@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
-	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/wallets"
 )
@@ -33,7 +33,7 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 
 		// test methods before any addresses are in the db
-		wallet, err := service.Get(ctx, "eu1", blockchain.Address{})
+		wallet, err := service.Get(ctx, "eu1", common.Address{})
 		require.Error(t, err)
 		require.Nil(t, wallet)
 
@@ -45,7 +45,7 @@ func TestService(t *testing.T) {
 
 		addr, err := service.Claim(ctx, "test")
 		require.Error(t, err)
-		require.Equal(t, blockchain.Address{}, addr)
+		require.Equal(t, common.Address{}, addr)
 
 		// test happy path
 		size := 2
@@ -88,7 +88,7 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(accts))
 
-		random, err := blockchain.AddressFromHex("0xc1912fee45d61c87cc5ea59dae31190fffff232d")
+		random, err := common.AddressFromHex("0xc1912fee45d61c87cc5ea59dae31190fffff232d")
 		require.NoError(t, err)
 		wallet, err = service.Get(ctx, "eu1", random)
 		require.Error(t, err)
@@ -96,12 +96,12 @@ func TestService(t *testing.T) {
 
 		addr, err = service.Claim(ctx, "test-satellite")
 		require.NoError(t, err)
-		require.NotEqual(t, blockchain.Address{}, addr)
+		require.NotEqual(t, common.Address{}, addr)
 
 		addr, err = service.Claim(ctx, "test-satellite")
 		require.Error(t, err)
 		require.True(t, errs.Is(err, wallets.ErrNoAvailableWallets))
-		require.Equal(t, blockchain.Address{}, addr)
+		require.Equal(t, common.Address{}, addr)
 	})
 }
 

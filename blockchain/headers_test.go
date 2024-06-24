@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -19,6 +18,7 @@ import (
 	"storj.io/common/testrand"
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 )
@@ -27,7 +27,7 @@ func TestHeadersDBInsert(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		err := db.Headers().Insert(ctx, blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.Hash{},
+			Hash:      common.Hash{},
 			Number:    0,
 			Timestamp: time.Now().UTC(),
 		})
@@ -43,7 +43,7 @@ func TestHeadersDBDelete(t *testing.T) {
 
 		header := blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    0,
 			Timestamp: time.Now().UTC(),
 		}
@@ -64,7 +64,7 @@ func TestHeadersDBGet(t *testing.T) {
 
 		header := blockchain.Header{
 			ChainID:   1337,
-			Hash:      blockchain.HashFromBytes(b),
+			Hash:      common.HashFromBytes(b),
 			Number:    1,
 			Timestamp: time.Now().Round(time.Microsecond).UTC(),
 		}
@@ -104,7 +104,7 @@ func TestHeadersDBList(t *testing.T) {
 
 			header := blockchain.Header{
 				ChainID:   1337,
-				Hash:      blockchain.HashFromBytes(b),
+				Hash:      common.HashFromBytes(b),
 				Number:    i,
 				Timestamp: now.Add(time.Duration(i) * time.Minute),
 			}
@@ -137,7 +137,7 @@ func TestHeadersCache(t *testing.T) {
 		logger := zaptest.NewLogger(t)
 		now := time.Now().Round(time.Microsecond).UTC()
 		chainID := int64(1337)
-		var hash blockchain.Hash
+		var hash common.Hash
 		b := testrand.BytesInt(32)
 		copy(hash[:], b)
 

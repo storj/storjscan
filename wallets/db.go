@@ -9,7 +9,7 @@ import (
 
 	"github.com/zeebo/errs"
 
-	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 )
 
 // ErrNoAvailableWallets represents the error that occurs when there are no deposit addresses that are unclaimed.
@@ -20,7 +20,7 @@ var ErrUpdateWallet = errs.New("could not update wallet by address")
 
 // Wallet represents an entry in the wallets table.
 type Wallet struct {
-	Address   blockchain.Address
+	Address   common.Address
 	Claimed   time.Time
 	Satellite string
 	Info      string
@@ -29,7 +29,7 @@ type Wallet struct {
 
 // InsertWallet gathers data needed to insert a wallet.
 type InsertWallet struct {
-	Address blockchain.Address
+	Address common.Address
 	Info    string
 }
 
@@ -38,15 +38,15 @@ type InsertWallet struct {
 // architecture: Database
 type DB interface {
 	// Insert adds a new entry in the wallets table. Info can be an empty string.
-	Insert(ctx context.Context, satellite string, address blockchain.Address, info string) (*Wallet, error)
+	Insert(ctx context.Context, satellite string, address common.Address, info string) (*Wallet, error)
 	// InsertBatch adds a new db entry for each address. Entries is a slice of insert wallet data.
 	InsertBatch(ctx context.Context, satellite string, entries []InsertWallet) error
 	// Claim claims and returns the first unclaimed wallet address.
 	Claim(ctx context.Context, satellite string) (*Wallet, error)
 	// Get returns the information stored for a given address.
-	Get(ctx context.Context, satellite string, address blockchain.Address) (*Wallet, error)
+	Get(ctx context.Context, satellite string, address common.Address) (*Wallet, error)
 	// GetStats returns information about the wallets table.
 	GetStats(ctx context.Context) (*Stats, error)
 	// ListBySatellite returns accounts claimed by a certain satellite (address -> info).
-	ListBySatellite(ctx context.Context, satellite string) (map[blockchain.Address]string, error)
+	ListBySatellite(ctx context.Context, satellite string) (map[common.Address]string, error)
 }

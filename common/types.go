@@ -1,11 +1,9 @@
 // Copyright (C) 2021 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package blockchain
+package common
 
 import (
-	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/zeebo/errs"
 )
@@ -17,7 +15,7 @@ type Address = common.Address
 const AddrLength = 20
 
 // ErrAddrLength represents the error that the address is the wrong length.
-var ErrAddrLength = errs.Class(fmt.Sprintf("Address must be %v bytes in length", AddrLength))
+var ErrAddrLength = errs.Class("Address must be 20 bytes in length")
 
 // AddressFromHex creates new address from hex string.
 func AddressFromHex(hex string) (Address, error) {
@@ -40,6 +38,9 @@ func AddressFromBytes(byteAddr []byte) (Address, error) {
 
 // Hash represent cryptographic hash.
 type Hash = common.Hash
+
+// HashLength is byte length of cryptographic hash.
+const HashLength = 32
 
 // HashFromBytes creates hash from byte slice.
 func HashFromBytes(b []byte) Hash {

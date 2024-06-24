@@ -10,6 +10,7 @@ import (
 
 	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 )
 
 var mon = monkit.Package()
@@ -17,13 +18,13 @@ var mon = monkit.Package()
 // Payment is on chain payment made for particular contract and deposit wallet.
 type Payment struct {
 	ChainID     int64
-	From        blockchain.Address
-	To          blockchain.Address
+	From        common.Address
+	To          common.Address
 	TokenValue  currency.Amount
 	USDValue    currency.Amount
-	BlockHash   blockchain.Hash
+	BlockHash   common.Hash
 	BlockNumber int64
-	Transaction blockchain.Hash
+	Transaction common.Hash
 	LogIndex    int
 	Timestamp   time.Time
 }

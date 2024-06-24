@@ -10,6 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
+
+	"storj.io/storjscan/common"
 )
 
 var (
@@ -21,7 +23,7 @@ var (
 // No need to keep number as big.Int right now as block count on ethereum mainnet is far from overflowing int64 capacity.
 type Header struct {
 	ChainID   int64
-	Hash      Hash
+	Hash      common.Hash
 	Number    int64
 	Timestamp time.Time
 }
@@ -33,11 +35,11 @@ type HeadersDB interface {
 	// Insert inserts new header to cache db.
 	Insert(ctx context.Context, header Header) error
 	// Delete deletes header from db by hash.
-	Delete(ctx context.Context, ChainID int64, hash Hash) error
+	Delete(ctx context.Context, ChainID int64, hash common.Hash) error
 	// DeleteBefore deletes headers before the given time.
 	DeleteBefore(ctx context.Context, before time.Time) (err error)
 	// Get retrieves header by hash.
-	Get(ctx context.Context, ChainID int64, hash Hash) (Header, error)
+	Get(ctx context.Context, ChainID int64, hash common.Hash) (Header, error)
 	// GetByNumber retrieves header by number.
 	GetByNumber(ctx context.Context, ChainID int64, number int64) (Header, error)
 	// List retrieves all headers stored in cache db.
@@ -60,7 +62,7 @@ func NewHeadersCache(log *zap.Logger, db HeadersDB) *HeadersCache {
 
 // Get retrieves block header from cache storage or fetches header from client and caches it.
 // TODO: remove direct dependency on go-eth client from public API.
-func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, chainID int64, hash Hash) (Header, error) {
+func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, chainID int64, hash common.Hash) (Header, error) {
 	headersCache.log.Debug("fetching header", zap.Int64("Chain ID", chainID), zap.String("hash", hash.String()))
 	header, err := headersCache.db.Get(ctx, chainID, hash)
 	switch {
