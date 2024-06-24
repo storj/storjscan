@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"storj.io/common/currency"
 	"storj.io/common/testcontext"
 	"storj.io/storjscan/storjscandb/storjscandbtest"
 	"storj.io/storjscan/tokenprice"
@@ -23,8 +24,8 @@ func TestServicePriceAt(t *testing.T) {
 		tokenPriceDB := db.TokenPrice()
 		now := time.Now().Truncate(time.Second).UTC()
 
-		const price = 10
-		require.NoError(t, tokenPriceDB.Update(ctx, now, price))
+		price := currency.AmountFromBaseUnits(10, currency.USDollarsMicro)
+		require.NoError(t, tokenPriceDB.Update(ctx, now, price.BaseUnits()))
 
 		service := tokenprice.NewService(log, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 
