@@ -21,6 +21,7 @@ import (
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
 	"storj.io/storjscan/storjscandb/dbx"
@@ -63,7 +64,7 @@ func testEndpoint(t *testing.T, connStr string) {
 		require.NoError(t, err)
 
 		jsonEndpoint := `[{"Name":"Geth", "URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 

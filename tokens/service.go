@@ -23,14 +23,6 @@ import (
 // ErrService - tokens service error class.
 var ErrService = errs.Class("tokens service")
 
-// EthEndpoint contains the URL and contract address to access a chain API.
-type EthEndpoint struct {
-	Name     string `json:"name"`
-	URL      string `json:"url"`
-	Contract string `json:"contract"`
-	ChainID  int64  `json:"chainId,string,omitempty"`
-}
-
 // Config holds tokens service configuration.
 type Config struct {
 	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1'}]"`
@@ -41,7 +33,7 @@ type Config struct {
 // architecture: Service
 type Service struct {
 	log        *zap.Logger
-	endpoints  []EthEndpoint
+	endpoints  []common.EthEndpoint
 	headers    *blockchain.HeadersCache
 	walletDB   wallets.DB
 	tokenPrice *tokenprice.Service
@@ -51,7 +43,7 @@ type Service struct {
 // NewService creates new token service instance.
 func NewService(
 	log *zap.Logger,
-	endpoints []EthEndpoint,
+	endpoints []common.EthEndpoint,
 	cache *blockchain.HeadersCache,
 	walletDB wallets.DB,
 	tokenPrice *tokenprice.Service,
@@ -145,7 +137,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 
 // retrievePaymentsForAddresses retrieves all ERC20 token payments for given addresses from start block to end block.
 // a nil end block means the latest block.
-func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoint EthEndpoint, addresses []common.Address, start int64, end uint64) (_ []Payment, err error) {
+func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoint common.EthEndpoint, addresses []common.Address, start int64, end uint64) (_ []Payment, err error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
 		return []Payment{{}}, ErrService.Wrap(err)
@@ -201,7 +193,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 	return payments, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
 }
 
-func getCurrentLatestBlock(ctx context.Context, endpoint EthEndpoint) (_ blockchain.Header, err error) {
+func getCurrentLatestBlock(ctx context.Context, endpoint common.EthEndpoint) (_ blockchain.Header, err error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
 		return blockchain.Header{}, ErrService.Wrap(err)
@@ -237,7 +229,7 @@ func (service *Service) PingAll(ctx context.Context) (err error) {
 	return err
 }
 
-func ping(ctx context.Context, endpoint EthEndpoint) (err error) {
+func ping(ctx context.Context, endpoint common.EthEndpoint) (err error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
 		return err

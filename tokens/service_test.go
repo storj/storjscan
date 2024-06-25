@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
@@ -20,6 +19,7 @@ import (
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
 	"storj.io/storjscan/storjscandb/dbx"
@@ -117,7 +117,7 @@ func testPayments(t *testing.T, connStr string) {
 		}
 
 		jsonEndpoint := `[{"URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
@@ -262,7 +262,7 @@ func testAllPayments(t *testing.T, connStr string) {
 		}
 
 		jsonEndpoint := `[{"Name":"Geth", "URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
@@ -326,7 +326,7 @@ func TestPing(t *testing.T) {
 	testeth.Run(t, 1, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		network := networks[0]
 		jsonEndpoint := `[{"Name":"Geth", "URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
@@ -339,7 +339,7 @@ func TestPing(t *testing.T) {
 func TestChainIds(t *testing.T) {
 	testeth.Run(t, 2, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		jsonEndpoint := `[{"Name":"Geth1", "URL": "` + networks[0].HTTPEndpoint() + `", "Contract": "` + networks[0].TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(networks[0].ChainID()) + `"}, {"Name":"Geth2", "URL": "` + networks[1].HTTPEndpoint() + `", "Contract": "` + networks[1].TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(networks[1].ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
@@ -355,7 +355,7 @@ func TestChainIds(t *testing.T) {
 func TestPingMultipleAPIEndpoints(t *testing.T) {
 	testeth.Run(t, 2, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		jsonEndpoint := `[{"Name":"Geth1", "URL": "` + networks[0].HTTPEndpoint() + `", "Contract": "` + networks[0].TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(networks[0].ChainID()) + `"}, {"Name":"Geth2", "URL": "` + networks[1].HTTPEndpoint() + `", "Contract": "` + networks[1].TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(networks[1].ChainID()) + `"}]`
-		var ethEndpoints []tokens.EthEndpoint
+		var ethEndpoints []common.EthEndpoint
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 

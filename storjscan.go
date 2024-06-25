@@ -19,6 +19,7 @@ import (
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 	headerCleanup "storj.io/storjscan/blockchain/cleanup"
+	"storj.io/storjscan/common"
 	"storj.io/storjscan/health"
 	"storj.io/storjscan/tokenprice"
 	tokenPriceCleanup "storj.io/storjscan/tokenprice/cleanup"
@@ -129,7 +130,7 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	}
 
 	{ // tokens
-		var endpoints []tokens.EthEndpoint
+		var endpoints []common.EthEndpoint
 		err := json.Unmarshal([]byte(config.Tokens.Endpoints), &endpoints)
 		if err != nil {
 			return nil, err
