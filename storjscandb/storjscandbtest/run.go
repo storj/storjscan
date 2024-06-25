@@ -5,9 +5,16 @@ package storjscandbtest
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcutil/hdkeychain"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -19,6 +26,7 @@ import (
 	"storj.io/private/dbutil/tempdb"
 	"storj.io/storjscan"
 	"storj.io/storjscan/storjscandb"
+	"storj.io/storjscan/wallets"
 )
 
 // Checks that test db implements storjscan.DB.
@@ -105,4 +113,71 @@ func schemaName(testName, suffix, category string) string {
 		testName = testName[:maxTestNameLength]
 	}
 	return strings.ToLower(testName + "/" + suffix + "/" + category)
+}
+
+// GenerateTestAddresses create test addresses for the satellite and add them to the wallets service.
+func GenerateTestAddresses(ctx context.Context, service *wallets.Service, satellite string, count int) error {
+	seed := make([]byte, 64)
+	_, err := rand.Read(seed)
+	if err != nil {
+		return err
+	}
+
+	masterKey, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
+	if err != nil {
+		return err
+	}
+
+	var inserts []wallets.InsertWallet
+	next := accounts.DefaultIterator(accounts.DefaultBaseDerivationPath)
+	for i := 0; i < count; i++ {
+		account, err := Derive(masterKey, next())
+		if err != nil {
+			return err
+		}
+		inserts = append(inserts, wallets.InsertWallet{
+			Address: account.Address,
+			Info:    "test-info",
+		})
+	}
+
+	if len(inserts) < 1 {
+		return errors.New("no addresses created")
+	}
+
+	err = service.Register(ctx, satellite, inserts)
+	return err
+}
+
+// Derive derives an account from the master key using the provided path.
+func Derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (accounts.Account, error) {
+	var err error
+	key := masterKey
+	for _, n := range path {
+		key, err = key.Derive(n)
+		if err != nil {
+			return accounts.Account{}, errs.Wrap(err)
+		}
+	}
+
+	privateKey, err := key.ECPrivKey()
+	if err != nil {
+		return accounts.Account{}, errs.Wrap(err)
+	}
+	privateKeyECDSA := privateKey.ToECDSA()
+	publicKey := privateKeyECDSA.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return accounts.Account{}, errs.New("failed to get public key")
+	}
+
+	address := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	return accounts.Account{
+		Address: address,
+		URL: accounts.URL{
+			Scheme: "",
+			Path:   path.String(),
+		},
+	}, nil
 }

@@ -4,16 +4,8 @@
 package wallets_test
 
 import (
-	"context"
-	"crypto/ecdsa"
-	"crypto/rand"
-	"errors"
 	"testing"
 
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcutil/hdkeychain"
-	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap/zaptest"
@@ -51,7 +43,7 @@ func TestService(t *testing.T) {
 
 		// test happy path
 		size := 2
-		err = generateTestAddresses(ctx, service, satelliteName, size)
+		err = storjscandbtest.GenerateTestAddresses(ctx, service, satelliteName, size)
 		require.NoError(t, err)
 
 		stats, err = service.GetStats(ctx)
@@ -107,71 +99,6 @@ func TestService(t *testing.T) {
 	})
 }
 
-func generateTestAddresses(ctx context.Context, service *wallets.Service, satellite string, count int) error {
-	seed := make([]byte, 64)
-	_, err := rand.Read(seed)
-	if err != nil {
-		return err
-	}
-
-	masterKey, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
-	if err != nil {
-		return err
-	}
-
-	var inserts []wallets.InsertWallet
-	next := accounts.DefaultIterator(accounts.DefaultBaseDerivationPath)
-	for i := 0; i < count; i++ {
-		account, err := derive(masterKey, next())
-		if err != nil {
-			return err
-		}
-		inserts = append(inserts, wallets.InsertWallet{
-			Address: account.Address,
-			Info:    "test-info",
-		})
-	}
-
-	if len(inserts) < 1 {
-		return errors.New("no addresses created")
-	}
-
-	err = service.Register(ctx, satellite, inserts)
-	return err
-}
-
-func derive(masterKey *hdkeychain.ExtendedKey, path accounts.DerivationPath) (accounts.Account, error) {
-	var err error
-	key := masterKey
-	for _, n := range path {
-		key, err = key.Derive(n)
-		if err != nil {
-			return accounts.Account{}, errs.Wrap(err)
-		}
-	}
-
-	privateKey, err := key.ECPrivKey()
-	if err != nil {
-		return accounts.Account{}, errs.Wrap(err)
-	}
-	privateKeyECDSA := privateKey.ToECDSA()
-	publicKey := privateKeyECDSA.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		return accounts.Account{}, errs.New("failed to get public key")
-	}
-
-	address := crypto.PubkeyToAddress(*publicKeyECDSA)
-
-	return accounts.Account{
-		Address: address,
-		URL: accounts.URL{
-			Scheme: "",
-			Path:   path.String(),
-		},
-	}, nil
-}
-
 func TestListWallets(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		satelliteName1 := "test-satellite-1"
@@ -183,9 +110,9 @@ func TestListWallets(t *testing.T) {
 		require.NoError(t, err)
 
 		// add the wallets to the DB, 6 wallets for each satellite
-		err = generateTestAddresses(ctx, service, satelliteName1, size)
+		err = storjscandbtest.GenerateTestAddresses(ctx, service, satelliteName1, size)
 		require.NoError(t, err)
-		err = generateTestAddresses(ctx, service, satelliteName2, size)
+		err = storjscandbtest.GenerateTestAddresses(ctx, service, satelliteName2, size)
 		require.NoError(t, err)
 
 		// claim 1 wallet on satellite1 and 2 wallets on satellite2

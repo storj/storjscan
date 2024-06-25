@@ -97,7 +97,7 @@ func TestGenerate(t *testing.T) {
 
 			dp, err := accounts.ParseDerivationPath(parts[1])
 			require.NoError(t, err)
-			derived, err := derive(masterKey, dp)
+			derived, err := storjscandbtest.Derive(masterKey, dp)
 			require.NoError(t, err)
 
 			require.Equal(t, derived.Address, a)

@@ -38,7 +38,7 @@ func TestEndpoint(t *testing.T) {
 		})
 		defer ctx.Check(apiServer.Close)
 
-		err = generateTestAddresses(ctx, service, satelliteName, 1)
+		err = storjscandbtest.GenerateTestAddresses(ctx, service, satelliteName, 1)
 		require.NoError(t, err)
 
 		// happy path
