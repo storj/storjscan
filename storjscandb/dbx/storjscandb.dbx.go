@@ -328,6 +328,18 @@ CREATE TABLE token_prices (
 	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
 );
+CREATE TABLE transfer_events (
+	chain_id bigint NOT NULL,
+	block_hash bytea NOT NULL,
+	block_number bigint NOT NULL,
+	transaction bytea NOT NULL,
+	log_index integer NOT NULL,
+	from_address bytea NOT NULL,
+	to_address bytea NOT NULL,
+	token_value bigint NOT NULL,
+	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
+	PRIMARY KEY ( chain_id, block_hash, log_index )
+);
 CREATE TABLE wallets (
 	id bigserial NOT NULL,
 	address bytea NOT NULL,
@@ -450,6 +462,18 @@ CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
 	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
+);
+CREATE TABLE transfer_events (
+	chain_id bigint NOT NULL,
+	block_hash bytea NOT NULL,
+	block_number bigint NOT NULL,
+	transaction bytea NOT NULL,
+	log_index integer NOT NULL,
+	from_address bytea NOT NULL,
+	to_address bytea NOT NULL,
+	token_value bigint NOT NULL,
+	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
+	PRIMARY KEY ( chain_id, block_hash, log_index )
 );
 CREATE TABLE wallets (
 	id bigserial NOT NULL,
@@ -681,6 +705,194 @@ func (f TokenPrice_Price_Field) value() interface{} {
 }
 
 func (TokenPrice_Price_Field) _Column() string { return "price" }
+
+type TransferEvent struct {
+	ChainId     int64
+	BlockHash   []byte
+	BlockNumber int64
+	Transaction []byte
+	LogIndex    int
+	FromAddress []byte
+	ToAddress   []byte
+	TokenValue  int64
+	CreatedAt   time.Time
+}
+
+func (TransferEvent) _Table() string { return "transfer_events" }
+
+type TransferEvent_Update_Fields struct {
+}
+
+type TransferEvent_ChainId_Field struct {
+	_set   bool
+	_null  bool
+	_value int64
+}
+
+func TransferEvent_ChainId(v int64) TransferEvent_ChainId_Field {
+	return TransferEvent_ChainId_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_ChainId_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_ChainId_Field) _Column() string { return "chain_id" }
+
+type TransferEvent_BlockHash_Field struct {
+	_set   bool
+	_null  bool
+	_value []byte
+}
+
+func TransferEvent_BlockHash(v []byte) TransferEvent_BlockHash_Field {
+	return TransferEvent_BlockHash_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_BlockHash_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_BlockHash_Field) _Column() string { return "block_hash" }
+
+type TransferEvent_BlockNumber_Field struct {
+	_set   bool
+	_null  bool
+	_value int64
+}
+
+func TransferEvent_BlockNumber(v int64) TransferEvent_BlockNumber_Field {
+	return TransferEvent_BlockNumber_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_BlockNumber_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_BlockNumber_Field) _Column() string { return "block_number" }
+
+type TransferEvent_Transaction_Field struct {
+	_set   bool
+	_null  bool
+	_value []byte
+}
+
+func TransferEvent_Transaction(v []byte) TransferEvent_Transaction_Field {
+	return TransferEvent_Transaction_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_Transaction_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_Transaction_Field) _Column() string { return "transaction" }
+
+type TransferEvent_LogIndex_Field struct {
+	_set   bool
+	_null  bool
+	_value int
+}
+
+func TransferEvent_LogIndex(v int) TransferEvent_LogIndex_Field {
+	return TransferEvent_LogIndex_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_LogIndex_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_LogIndex_Field) _Column() string { return "log_index" }
+
+type TransferEvent_FromAddress_Field struct {
+	_set   bool
+	_null  bool
+	_value []byte
+}
+
+func TransferEvent_FromAddress(v []byte) TransferEvent_FromAddress_Field {
+	return TransferEvent_FromAddress_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_FromAddress_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_FromAddress_Field) _Column() string { return "from_address" }
+
+type TransferEvent_ToAddress_Field struct {
+	_set   bool
+	_null  bool
+	_value []byte
+}
+
+func TransferEvent_ToAddress(v []byte) TransferEvent_ToAddress_Field {
+	return TransferEvent_ToAddress_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_ToAddress_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_ToAddress_Field) _Column() string { return "to_address" }
+
+type TransferEvent_TokenValue_Field struct {
+	_set   bool
+	_null  bool
+	_value int64
+}
+
+func TransferEvent_TokenValue(v int64) TransferEvent_TokenValue_Field {
+	return TransferEvent_TokenValue_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_TokenValue_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_TokenValue_Field) _Column() string { return "token_value" }
+
+type TransferEvent_CreatedAt_Field struct {
+	_set   bool
+	_null  bool
+	_value time.Time
+}
+
+func TransferEvent_CreatedAt(v time.Time) TransferEvent_CreatedAt_Field {
+	return TransferEvent_CreatedAt_Field{_set: true, _value: v}
+}
+
+func (f TransferEvent_CreatedAt_Field) value() interface{} {
+	if !f._set || f._null {
+		return nil
+	}
+	return f._value
+}
+
+func (TransferEvent_CreatedAt_Field) _Column() string { return "created_at" }
 
 type Wallet struct {
 	Id        int64
@@ -1120,6 +1332,10 @@ func (h *__sqlbundle_Hole) Render() string {
 // end runtime support for building sql statements
 //
 
+type BlockNumber_Row struct {
+	BlockNumber int64
+}
+
 func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_hash BlockHeader_Hash_Field,
@@ -1150,6 +1366,47 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 		return nil, obj.makeErr(err)
 	}
 	return block_header, nil
+
+}
+
+func (obj *pgxImpl) Create_TransferEvent(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_hash TransferEvent_BlockHash_Field,
+	transfer_event_block_number TransferEvent_BlockNumber_Field,
+	transfer_event_transaction TransferEvent_Transaction_Field,
+	transfer_event_log_index TransferEvent_LogIndex_Field,
+	transfer_event_from_address TransferEvent_FromAddress_Field,
+	transfer_event_to_address TransferEvent_ToAddress_Field,
+	transfer_event_token_value TransferEvent_TokenValue_Field) (
+	transfer_event *TransferEvent, err error) {
+	defer mon.Task()(&ctx)(&err)
+	__chain_id_val := transfer_event_chain_id.value()
+	__block_hash_val := transfer_event_block_hash.value()
+	__block_number_val := transfer_event_block_number.value()
+	__transaction_val := transfer_event_transaction.value()
+	__log_index_val := transfer_event_log_index.value()
+	__from_address_val := transfer_event_from_address.value()
+	__to_address_val := transfer_event_to_address.value()
+	__token_value_val := transfer_event_token_value.value()
+
+	var __columns = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("chain_id, block_hash, block_number, transaction, log_index, from_address, to_address, token_value")}
+	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?, ?, ?, ?, ?, ?, ?")}
+	var __clause = &__sqlbundle_Hole{SQL: __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("("), __columns, __sqlbundle_Literal(") VALUES ("), __placeholders, __sqlbundle_Literal(")")}}}
+
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO transfer_events "), __clause, __sqlbundle_Literal(" RETURNING transfer_events.chain_id, transfer_events.block_hash, transfer_events.block_number, transfer_events.transaction, transfer_events.log_index, transfer_events.from_address, transfer_events.to_address, transfer_events.token_value, transfer_events.created_at")}}
+
+	var __values []interface{}
+	__values = append(__values, __chain_id_val, __block_hash_val, __block_number_val, __transaction_val, __log_index_val, __from_address_val, __to_address_val, __token_value_val)
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	transfer_event = &TransferEvent{}
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&transfer_event.ChainId, &transfer_event.BlockHash, &transfer_event.BlockNumber, &transfer_event.Transaction, &transfer_event.LogIndex, &transfer_event.FromAddress, &transfer_event.ToAddress, &transfer_event.TokenValue, &transfer_event.CreatedAt)
+	if err != nil {
+		return nil, obj.makeErr(err)
+	}
+	return transfer_event, nil
 
 }
 
@@ -1330,6 +1587,147 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.Context,
 			return nil, obj.makeErr(err)
 		}
 		return block_header, nil
+	}
+
+}
+
+func (obj *pgxImpl) All_TransferEvent_By_ChainId_And_ToAddress_And_BlockNumber_GreaterOrEqual_OrderBy_Asc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_to_address TransferEvent_ToAddress_Field,
+	transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+	rows []*TransferEvent, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.chain_id, transfer_events.block_hash, transfer_events.block_number, transfer_events.transaction, transfer_events.log_index, transfer_events.from_address, transfer_events.to_address, transfer_events.token_value, transfer_events.created_at FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.to_address = ? AND transfer_events.block_number >= ? ORDER BY transfer_events.block_number")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_to_address.value(), transfer_event_block_number_greater_or_equal.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		rows, err = func() (rows []*TransferEvent, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			for __rows.Next() {
+				transfer_event := &TransferEvent{}
+				err = __rows.Scan(&transfer_event.ChainId, &transfer_event.BlockHash, &transfer_event.BlockNumber, &transfer_event.Transaction, &transfer_event.LogIndex, &transfer_event.FromAddress, &transfer_event.ToAddress, &transfer_event.TokenValue, &transfer_event.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+				rows = append(rows, transfer_event)
+			}
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return rows, nil
+	}
+
+}
+
+func (obj *pgxImpl) First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Desc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field) (
+	row *BlockNumber_Row, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.block_number FROM transfer_events WHERE transfer_events.chain_id = ? ORDER BY transfer_events.block_number DESC LIMIT 1 OFFSET 0")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		row, err = func() (row *BlockNumber_Row, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
+
+			row = &BlockNumber_Row{}
+			err = __rows.Scan(&row.BlockNumber)
+			if err != nil {
+				return nil, err
+			}
+
+			return row, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return row, nil
+	}
+
+}
+
+func (obj *pgxImpl) First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Asc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field) (
+	row *BlockNumber_Row, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.block_number FROM transfer_events WHERE transfer_events.chain_id = ? ORDER BY transfer_events.block_number LIMIT 1 OFFSET 0")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		row, err = func() (row *BlockNumber_Row, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
+
+			row = &BlockNumber_Row{}
+			err = __rows.Scan(&row.BlockNumber)
+			if err != nil {
+				return nil, err
+			}
+
+			return row, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return row, nil
 	}
 
 }
@@ -1758,6 +2156,62 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 
 }
 
+func (obj *pgxImpl) Delete_TransferEvent_By_ChainId_And_BlockNumber_GreaterOrEqual(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.block_number >= ?")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_block_number_greater_or_equal.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
+func (obj *pgxImpl) Delete_TransferEvent_By_ChainId_And_BlockNumber_Less(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_number_less TransferEvent_BlockNumber_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.block_number < ?")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_block_number_less.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
 func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
@@ -1800,6 +2254,16 @@ func (obj *pgxImpl) deleteAll(ctx context.Context) (count int64, err error) {
 	var __res sql.Result
 	var __count int64
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM wallets;")
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	__count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+	count += __count
+	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM transfer_events;")
 	if err != nil {
 		return 0, obj.makeErr(err)
 	}
@@ -1864,6 +2328,47 @@ func (obj *pgxcockroachImpl) Create_BlockHeader(ctx context.Context,
 		return nil, obj.makeErr(err)
 	}
 	return block_header, nil
+
+}
+
+func (obj *pgxcockroachImpl) Create_TransferEvent(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_hash TransferEvent_BlockHash_Field,
+	transfer_event_block_number TransferEvent_BlockNumber_Field,
+	transfer_event_transaction TransferEvent_Transaction_Field,
+	transfer_event_log_index TransferEvent_LogIndex_Field,
+	transfer_event_from_address TransferEvent_FromAddress_Field,
+	transfer_event_to_address TransferEvent_ToAddress_Field,
+	transfer_event_token_value TransferEvent_TokenValue_Field) (
+	transfer_event *TransferEvent, err error) {
+	defer mon.Task()(&ctx)(&err)
+	__chain_id_val := transfer_event_chain_id.value()
+	__block_hash_val := transfer_event_block_hash.value()
+	__block_number_val := transfer_event_block_number.value()
+	__transaction_val := transfer_event_transaction.value()
+	__log_index_val := transfer_event_log_index.value()
+	__from_address_val := transfer_event_from_address.value()
+	__to_address_val := transfer_event_to_address.value()
+	__token_value_val := transfer_event_token_value.value()
+
+	var __columns = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("chain_id, block_hash, block_number, transaction, log_index, from_address, to_address, token_value")}
+	var __placeholders = &__sqlbundle_Hole{SQL: __sqlbundle_Literal("?, ?, ?, ?, ?, ?, ?, ?")}
+	var __clause = &__sqlbundle_Hole{SQL: __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("("), __columns, __sqlbundle_Literal(") VALUES ("), __placeholders, __sqlbundle_Literal(")")}}}
+
+	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO transfer_events "), __clause, __sqlbundle_Literal(" RETURNING transfer_events.chain_id, transfer_events.block_hash, transfer_events.block_number, transfer_events.transaction, transfer_events.log_index, transfer_events.from_address, transfer_events.to_address, transfer_events.token_value, transfer_events.created_at")}}
+
+	var __values []interface{}
+	__values = append(__values, __chain_id_val, __block_hash_val, __block_number_val, __transaction_val, __log_index_val, __from_address_val, __to_address_val, __token_value_val)
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	transfer_event = &TransferEvent{}
+	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&transfer_event.ChainId, &transfer_event.BlockHash, &transfer_event.BlockNumber, &transfer_event.Transaction, &transfer_event.LogIndex, &transfer_event.FromAddress, &transfer_event.ToAddress, &transfer_event.TokenValue, &transfer_event.CreatedAt)
+	if err != nil {
+		return nil, obj.makeErr(err)
+	}
+	return transfer_event, nil
 
 }
 
@@ -2044,6 +2549,147 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.C
 			return nil, obj.makeErr(err)
 		}
 		return block_header, nil
+	}
+
+}
+
+func (obj *pgxcockroachImpl) All_TransferEvent_By_ChainId_And_ToAddress_And_BlockNumber_GreaterOrEqual_OrderBy_Asc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_to_address TransferEvent_ToAddress_Field,
+	transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+	rows []*TransferEvent, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.chain_id, transfer_events.block_hash, transfer_events.block_number, transfer_events.transaction, transfer_events.log_index, transfer_events.from_address, transfer_events.to_address, transfer_events.token_value, transfer_events.created_at FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.to_address = ? AND transfer_events.block_number >= ? ORDER BY transfer_events.block_number")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_to_address.value(), transfer_event_block_number_greater_or_equal.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		rows, err = func() (rows []*TransferEvent, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			for __rows.Next() {
+				transfer_event := &TransferEvent{}
+				err = __rows.Scan(&transfer_event.ChainId, &transfer_event.BlockHash, &transfer_event.BlockNumber, &transfer_event.Transaction, &transfer_event.LogIndex, &transfer_event.FromAddress, &transfer_event.ToAddress, &transfer_event.TokenValue, &transfer_event.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+				rows = append(rows, transfer_event)
+			}
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return rows, nil
+	}
+
+}
+
+func (obj *pgxcockroachImpl) First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Desc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field) (
+	row *BlockNumber_Row, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.block_number FROM transfer_events WHERE transfer_events.chain_id = ? ORDER BY transfer_events.block_number DESC LIMIT 1 OFFSET 0")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		row, err = func() (row *BlockNumber_Row, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
+
+			row = &BlockNumber_Row{}
+			err = __rows.Scan(&row.BlockNumber)
+			if err != nil {
+				return nil, err
+			}
+
+			return row, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return row, nil
+	}
+
+}
+
+func (obj *pgxcockroachImpl) First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Asc_BlockNumber(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field) (
+	row *BlockNumber_Row, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT transfer_events.block_number FROM transfer_events WHERE transfer_events.chain_id = ? ORDER BY transfer_events.block_number LIMIT 1 OFFSET 0")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		row, err = func() (row *BlockNumber_Row, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			if !__rows.Next() {
+				if err := __rows.Err(); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
+
+			row = &BlockNumber_Row{}
+			err = __rows.Scan(&row.BlockNumber)
+			if err != nil {
+				return nil, err
+			}
+
+			return row, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return row, nil
 	}
 
 }
@@ -2472,6 +3118,62 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Co
 
 }
 
+func (obj *pgxcockroachImpl) Delete_TransferEvent_By_ChainId_And_BlockNumber_GreaterOrEqual(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.block_number >= ?")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_block_number_greater_or_equal.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
+func (obj *pgxcockroachImpl) Delete_TransferEvent_By_ChainId_And_BlockNumber_Less(ctx context.Context,
+	transfer_event_chain_id TransferEvent_ChainId_Field,
+	transfer_event_block_number_less TransferEvent_BlockNumber_Field) (
+	count int64, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("DELETE FROM transfer_events WHERE transfer_events.chain_id = ? AND transfer_events.block_number < ?")
+
+	var __values []interface{}
+	__values = append(__values, transfer_event_chain_id.value(), transfer_event_block_number_less.value())
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	__res, err := obj.driver.ExecContext(ctx, __stmt, __values...)
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	return count, nil
+
+}
+
 func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
@@ -2523,6 +3225,16 @@ func (obj *pgxcockroachImpl) deleteAll(ctx context.Context) (count int64, err er
 		return 0, obj.makeErr(err)
 	}
 	count += __count
+	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM transfer_events;")
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+
+	__count, err = __res.RowsAffected()
+	if err != nil {
+		return 0, obj.makeErr(err)
+	}
+	count += __count
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM token_prices;")
 	if err != nil {
 		return 0, obj.makeErr(err)
@@ -2552,6 +3264,12 @@ type Methods interface {
 	All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 		rows []*BlockHeader, err error)
 
+	All_TransferEvent_By_ChainId_And_ToAddress_And_BlockNumber_GreaterOrEqual_OrderBy_Asc_BlockNumber(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field,
+		transfer_event_to_address TransferEvent_ToAddress_Field,
+		transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+		rows []*TransferEvent, err error)
+
 	All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 		rows []*Wallet, err error)
 
@@ -2575,6 +3293,17 @@ type Methods interface {
 		block_header_timestamp BlockHeader_Timestamp_Field) (
 		block_header *BlockHeader, err error)
 
+	Create_TransferEvent(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field,
+		transfer_event_block_hash TransferEvent_BlockHash_Field,
+		transfer_event_block_number TransferEvent_BlockNumber_Field,
+		transfer_event_transaction TransferEvent_Transaction_Field,
+		transfer_event_log_index TransferEvent_LogIndex_Field,
+		transfer_event_from_address TransferEvent_FromAddress_Field,
+		transfer_event_to_address TransferEvent_ToAddress_Field,
+		transfer_event_token_value TransferEvent_TokenValue_Field) (
+		transfer_event *TransferEvent, err error)
+
 	Create_Wallet(ctx context.Context,
 		wallet_address Wallet_Address_Field,
 		wallet_satellite Wallet_Satellite_Field,
@@ -2594,9 +3323,27 @@ type Methods interface {
 		token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 		count int64, err error)
 
+	Delete_TransferEvent_By_ChainId_And_BlockNumber_GreaterOrEqual(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field,
+		transfer_event_block_number_greater_or_equal TransferEvent_BlockNumber_Field) (
+		count int64, err error)
+
+	Delete_TransferEvent_By_ChainId_And_BlockNumber_Less(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field,
+		transfer_event_block_number_less TransferEvent_BlockNumber_Field) (
+		count int64, err error)
+
 	First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 		token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 		token_price *TokenPrice, err error)
+
+	First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Asc_BlockNumber(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field) (
+		row *BlockNumber_Row, err error)
+
+	First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Desc_BlockNumber(ctx context.Context,
+		transfer_event_chain_id TransferEvent_ChainId_Field) (
+		row *BlockNumber_Row, err error)
 
 	First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
 		wallet_satellite Wallet_Satellite_Field) (

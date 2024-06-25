@@ -226,6 +226,25 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					`ALTER TABLE block_headers ADD CONSTRAINT block_headers_pkey PRIMARY KEY ( chain_id, hash );`,
 				},
 			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Add transfer event logs cache table",
+				Version:     8,
+				Action: migrate.SQL{
+					`CREATE TABLE transfer_events (
+						chain_id bigint NOT NULL,
+						block_hash bytea NOT NULL,
+						block_number bigint NOT NULL,
+						transaction bytea NOT NULL,
+						log_index integer NOT NULL,
+						from_address bytea NOT NULL,
+						to_address bytea NOT NULL,
+						token_value bigint NOT NULL,
+						created_at timestamp with time zone NOT NULL,
+						PRIMARY KEY ( chain_id, block_hash, log_index )
+					);`,
+				},
+			},
 		},
 	}
 }
