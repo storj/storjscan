@@ -156,3 +156,27 @@ func (wdb *walletsDB) ListBySatellite(ctx context.Context, satellite string) (ma
 	}
 	return accounts, errList
 }
+
+// ListAll returns all claimed addresses.
+func (wdb *walletsDB) ListAll(ctx context.Context) (map[common.Address]string, error) {
+	rows, err := wdb.db.All_Wallet_By_Claimed_IsNot_Null(ctx)
+	if err != nil {
+		return map[common.Address]string{}, ErrWalletsDB.Wrap(err)
+	}
+	var accounts = make(map[common.Address]string)
+	var errList error
+	for _, r := range rows {
+		addr, err := common.AddressFromBytes(r.Address)
+		if err != nil {
+			errList = errs.Combine(errList, ErrWalletsDB.Wrap(err))
+			continue
+		}
+
+		info := ""
+		if r.Info != nil {
+			info = *r.Info
+		}
+		accounts[addr] = info
+	}
+	return accounts, errList
+}

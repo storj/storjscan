@@ -1569,6 +1569,49 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 
 }
 
+func (obj *pgxImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+	rows []*Wallet, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is not NULL")
+
+	var __values []interface{}
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		rows, err = func() (rows []*Wallet, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			for __rows.Next() {
+				wallet := &Wallet{}
+				err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+				rows = append(rows, wallet)
+			}
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return rows, nil
+	}
+
+}
+
 func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
@@ -2240,6 +2283,49 @@ func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context
 
 }
 
+func (obj *pgxcockroachImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+	rows []*Wallet, err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is not NULL")
+
+	var __values []interface{}
+
+	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
+	obj.logStmt(__stmt, __values...)
+
+	for {
+		rows, err = func() (rows []*Wallet, err error) {
+			__rows, err := obj.driver.QueryContext(ctx, __stmt, __values...)
+			if err != nil {
+				return nil, err
+			}
+			defer __rows.Close()
+
+			for __rows.Next() {
+				wallet := &Wallet{}
+				err = __rows.Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+				rows = append(rows, wallet)
+			}
+			if err := __rows.Err(); err != nil {
+				return nil, err
+			}
+			return rows, nil
+		}()
+		if err != nil {
+			if obj.shouldRetry(err) {
+				continue
+			}
+			return nil, obj.makeErr(err)
+		}
+		return rows, nil
+	}
+
+}
+
 func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
@@ -2465,6 +2551,9 @@ func (obj *pgxcockroachImpl) deleteAll(ctx context.Context) (count int64, err er
 type Methods interface {
 	All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 		rows []*BlockHeader, err error)
+
+	All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
+		rows []*Wallet, err error)
 
 	All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 		wallet_satellite Wallet_Satellite_Field) (

@@ -49,4 +49,6 @@ type DB interface {
 	GetStats(ctx context.Context) (*Stats, error)
 	// ListBySatellite returns accounts claimed by a certain satellite (address -> info).
 	ListBySatellite(ctx context.Context, satellite string) (map[common.Address]string, error)
+	// ListAll returns all claimed accounts (address -> info).
+	ListAll(ctx context.Context) (map[common.Address]string, error)
 }

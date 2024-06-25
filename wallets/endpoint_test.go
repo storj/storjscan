@@ -22,6 +22,7 @@ import (
 
 func TestEndpoint(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
+		satelliteName := "test-satellite"
 		logger := zaptest.NewLogger(t)
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
@@ -30,14 +31,14 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		endpoint := wallets.NewEndpoint(logger.Named("endpoint"), service)
 
-		apiServer := api.NewServer(logger, lis, map[string]string{"test-satellite": "secret"})
+		apiServer := api.NewServer(logger, lis, map[string]string{satelliteName: "secret"})
 		apiServer.NewAPI("/wallets", endpoint.Register)
 		ctx.Go(func() error {
 			return apiServer.Run(ctx)
 		})
 		defer ctx.Check(apiServer.Close)
 
-		err = generateTestAddresses(ctx, service, 1)
+		err = generateTestAddresses(ctx, service, satelliteName, 1)
 		require.NoError(t, err)
 
 		// happy path
@@ -49,7 +50,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
-		req.SetBasicAuth("test-satellite", "secret")
+		req.SetBasicAuth(satelliteName, "secret")
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer ctx.Check(func() error { return resp.Body.Close() })
@@ -60,7 +61,7 @@ func TestEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, returnAddr)
 
-		addresses, err := service.ListBySatellite(ctx, "test-satellite")
+		addresses, err := service.ListBySatellite(ctx, satelliteName)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(addresses))
 
@@ -68,7 +69,7 @@ func TestEndpoint(t *testing.T) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("http://%s/api/v0/wallets/claim", lis.Addr().String()), nil)
 		require.NoError(t, err)
 
-		req.SetBasicAuth("test-satellite", "secret")
+		req.SetBasicAuth(satelliteName, "secret")
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer ctx.Check(func() error { return resp.Body.Close() })
