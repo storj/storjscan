@@ -19,6 +19,7 @@ import (
 	"storj.io/private/dbutil/pgtest"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
 	"storj.io/storjscan/private/testeth/testtoken"
@@ -121,9 +122,34 @@ func testPayments(t *testing.T, connStr string) {
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		cache := blockchain.NewHeadersCache(logger, db.Headers())
+		headersCache := blockchain.NewHeadersCache(logger, db.Headers())
+		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
+			CacheRefreshInterval: 10,
+			AddressBatchSize:     100,
+			BlockBatchSize:       100,
+			ChainReorgBuffer:     15,
+			MaximumQuerySize:     10000,
+		})
+		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, ethEndpoints, cache, nil, tokenPrice, 100)
+		service := tokens.NewService(logger, ethEndpoints, headersCache, eventsCache, tokenPrice)
+
+		// add the wallet to the DB
+		insertedWallet, err := db.Wallets().Insert(ctx, "test", accs[3].Address, "")
+		require.NoError(t, err)
+		claimedWallet, err := db.Wallets().Claim(ctx, "test")
+		require.NoError(t, err)
+
+		require.Equal(t, insertedWallet.Address, claimedWallet.Address)
+		require.Equal(t, claimedWallet.Address, accs[3].Address)
+
+		// run the transfer events cache chore
+		defer ctx.Check(eventsCacheChore.Close)
+		ctx.Go(func() error {
+			return eventsCacheChore.Run(ctx)
+		})
+		eventsCacheChore.Loop.Pause()
+		eventsCacheChore.Loop.TriggerWait()
 
 		payments, err := service.Payments(ctx, accs[3].Address, nil)
 		require.NoError(t, err)
@@ -139,6 +165,7 @@ func testPayments(t *testing.T, connStr string) {
 		}
 
 		require.Equal(t, latestBlockHeader, payments.LatestBlocks[0])
+		require.Equal(t, 6, len(payments.Payments))
 
 		for i, payment := range payments.Payments {
 			testPayment := testPayments[i]
@@ -266,9 +293,24 @@ func testAllPayments(t *testing.T, connStr string) {
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		cache := blockchain.NewHeadersCache(logger, db.Headers())
+		headersCache := blockchain.NewHeadersCache(logger, db.Headers())
+		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
+			CacheRefreshInterval: 10,
+			AddressBatchSize:     100,
+			BlockBatchSize:       100,
+			ChainReorgBuffer:     15,
+			MaximumQuerySize:     10000,
+		})
+		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, ethEndpoints, cache, db.Wallets(), tokenPrice, 100)
+		service := tokens.NewService(logger, ethEndpoints, headersCache, eventsCache, tokenPrice)
+		// run the transfer events cache chore
+		defer ctx.Check(eventsCacheChore.Close)
+		ctx.Go(func() error {
+			return eventsCacheChore.Run(ctx)
+		})
+		eventsCacheChore.Loop.Pause()
+		eventsCacheChore.Loop.TriggerWait()
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)
@@ -330,7 +372,7 @@ func TestPing(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil)
 		err = service.PingAll(ctx)
 		require.NoError(t, err)
 	})
@@ -343,7 +385,7 @@ func TestChainIds(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil)
 		ids, err := service.GetChainIds(ctx)
 		require.Len(t, ids, 2)
 		require.Equal(t, "Geth1", ids[networks[0].ChainID().Int64()])
@@ -359,7 +401,7 @@ func TestPingMultipleAPIEndpoints(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil, 100)
+		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil)
 		err = service.PingAll(ctx)
 		require.NoError(t, err)
 	})

@@ -19,6 +19,7 @@ import (
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 	headerCleanup "storj.io/storjscan/blockchain/cleanup"
+	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/health"
 	"storj.io/storjscan/tokenprice"
@@ -33,6 +34,8 @@ var mon = monkit.Package()
 // Config wraps storjscan configuration.
 type Config struct {
 	Debug             debug.Config
+	Blockchain        events.Config
+	Events            events.Config
 	Tokens            tokens.Config
 	TokenPrice        tokenprice.Config
 	TokenPriceCleanup tokenPriceCleanup.Config
@@ -44,6 +47,8 @@ type Config struct {
 type DB interface {
 	// Headers creates headers database methods.
 	Headers() blockchain.HeadersDB
+	// Events creates events database methods.
+	Events() events.DB
 	// TokenPrice returns database for STORJ token price information.
 	TokenPrice() tokenprice.PriceQuoteDB
 	// Wallets returns database for deposit address information.
@@ -67,8 +72,10 @@ type App struct {
 	}
 
 	Blockchain struct {
-		HeadersCache *blockchain.HeadersCache
-		CleanupChore *headerCleanup.Chore
+		HeadersCache     *blockchain.HeadersCache
+		EventsCache      *events.Cache
+		EventsCacheChore *events.Chore
+		CleanupChore     *headerCleanup.Chore
 	}
 
 	Tokens struct {
@@ -110,6 +117,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	{ // blockchain
 		app.Blockchain.HeadersCache = blockchain.NewHeadersCache(log.Named("blockchain:headers-cache"),
 			db.Headers())
+		app.Blockchain.EventsCache = events.NewEventsCache(log.Named("blockchain:events-cache"),
+			db.Events(), db.Wallets(), config.Blockchain)
 	}
 
 	{ // token price
@@ -139,9 +148,16 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			endpoints,
 			app.Blockchain.HeadersCache,
-			db.Wallets(),
-			app.TokenPrice.Service,
-			100)
+			app.Blockchain.EventsCache,
+			app.TokenPrice.Service)
+
+		app.Blockchain.EventsCacheChore = events.NewChore(log.Named("blockchain:events-cache:chore"),
+			app.Blockchain.EventsCache, endpoints, config.Events.CacheRefreshInterval)
+		app.Services.Add(lifecycle.Item{
+			Name:  "eventscache:chore",
+			Run:   app.Blockchain.EventsCacheChore.Run,
+			Close: app.Blockchain.EventsCacheChore.Close,
+		})
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}

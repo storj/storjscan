@@ -7,17 +7,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
 	"storj.io/common/currency"
 	"storj.io/storjscan/blockchain"
+	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/tokenprice"
-	"storj.io/storjscan/tokens/erc20"
-	"storj.io/storjscan/wallets"
 )
 
 // ErrService - tokens service error class.
@@ -32,29 +30,26 @@ type Config struct {
 //
 // architecture: Service
 type Service struct {
-	log        *zap.Logger
-	endpoints  []common.EthEndpoint
-	headers    *blockchain.HeadersCache
-	walletDB   wallets.DB
-	tokenPrice *tokenprice.Service
-	batchSize  int
+	log          *zap.Logger
+	endpoints    []common.EthEndpoint
+	headersCache *blockchain.HeadersCache
+	eventsCache  *events.Cache
+	tokenPrice   *tokenprice.Service
 }
 
 // NewService creates new token service instance.
 func NewService(
 	log *zap.Logger,
 	endpoints []common.EthEndpoint,
-	cache *blockchain.HeadersCache,
-	walletDB wallets.DB,
-	tokenPrice *tokenprice.Service,
-	batchSize int) *Service {
+	headersCache *blockchain.HeadersCache,
+	eventsCache *events.Cache,
+	tokenPrice *tokenprice.Service) *Service {
 	return &Service{
-		log:        log,
-		endpoints:  endpoints,
-		headers:    cache,
-		walletDB:   walletDB,
-		tokenPrice: tokenPrice,
-		batchSize:  batchSize,
+		log:          log,
+		endpoints:    endpoints,
+		headersCache: headersCache,
+		eventsCache:  eventsCache,
+		tokenPrice:   tokenPrice,
 	}
 }
 
@@ -62,29 +57,7 @@ func NewService(
 func (service *Service) Payments(ctx context.Context, address common.Address, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
-
-	var allPayments []Payment
-	var latestBlocks []blockchain.Header
-	for _, endpoint := range service.endpoints {
-		if err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
-		}
-		latestBlock, err := getCurrentLatestBlock(ctx, endpoint)
-		if err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
-		}
-		payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, []common.Address{address}, from[endpoint.ChainID], uint64(latestBlock.Number))
-		if err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
-		}
-		allPayments = append(allPayments, payments...)
-		latestBlocks = append(latestBlocks, latestBlock)
-	}
-
-	return LatestPayments{
-		LatestBlocks: latestBlocks,
-		Payments:     allPayments,
-	}, nil
+	return service.payments(ctx, address, from)
 }
 
 // AllPayments returns all the payments across all configured endpoints starting from a particular block per chain associated with the current satellite.
@@ -96,12 +69,10 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 		// it shouldn't be possible if auth is properly set up
 		return LatestPayments{}, ErrService.New("api identifier is empty")
 	}
-	walletsOfSatellite, err := service.walletDB.ListBySatellite(ctx, satelliteID)
-	if err != nil {
-		return LatestPayments{}, ErrService.Wrap(err)
-	}
+	return service.payments(ctx, satelliteID, from)
+}
 
-	allWallets := asList(walletsOfSatellite)
+func (service *Service) payments(ctx context.Context, identifier interface{}, from map[int64]int64) (_ LatestPayments, err error) {
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
@@ -112,21 +83,12 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		// query the rpc API in batches
-		for i := 0; i < len(allWallets); i += service.batchSize {
-			var addresses []common.Address
-
-			for a := i; a-i < service.batchSize && a < len(allWallets); a++ {
-				addresses = append(addresses, allWallets[a])
-			}
-
-			payments, err := service.retrievePaymentsForAddresses(ctx, endpoint, addresses, from[endpoint.ChainID], uint64(latestBlock.Number))
-			if err != nil {
-				return LatestPayments{}, ErrService.Wrap(err)
-			}
-			allPayments = append(allPayments, payments...)
+		payments, err := service.retrievePayments(ctx, endpoint, identifier, from[endpoint.ChainID])
+		if err != nil {
+			return LatestPayments{}, ErrService.Wrap(err)
 		}
 		latestBlocks = append(latestBlocks, latestBlock)
+		allPayments = append(allPayments, payments...)
 	}
 
 	return LatestPayments{
@@ -135,53 +97,26 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	}, nil
 }
 
-// retrievePaymentsForAddresses retrieves all ERC20 token payments for given addresses from start block to end block.
-// a nil end block means the latest block.
-func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoint common.EthEndpoint, addresses []common.Address, start int64, end uint64) (_ []Payment, err error) {
+func (service *Service) retrievePayments(ctx context.Context, endpoint common.EthEndpoint, identifier interface{}, start int64) (_ []Payment, err error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
-		return []Payment{{}}, ErrService.Wrap(err)
+		return []Payment{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
 
-	if err != nil {
-		return []Payment{{}}, ErrService.Wrap(err)
-	}
-
-	opts := &bind.FilterOpts{
-		Start:   uint64(start),
-		End:     &end,
-		Context: ctx,
-	}
-
-	contract, err := common.AddressFromHex(endpoint.Contract)
-	if err != nil {
-		return []Payment{{}}, ErrService.Wrap(err)
-	}
-
-	token, err := erc20.NewERC20(contract, client)
-	if err != nil {
-		return []Payment{{}}, ErrService.Wrap(err)
-	}
-
-	iter, err := token.FilterTransfer(opts, nil, addresses)
-	if err != nil {
-		return []Payment{{}}, ErrService.Wrap(err)
-	}
-	defer func() { err = errs.Combine(err, ErrService.Wrap(iter.Close())) }()
-
+	transferEvents, err := service.eventsCache.GetTransferEvents(ctx, endpoint.ChainID, identifier, uint64(start))
 	var payments []Payment
-	for iter.Next() {
-		header, err := service.headers.Get(ctx, client, endpoint.ChainID, iter.Event.Raw.BlockHash)
+	for _, event := range transferEvents {
+		header, err := service.headersCache.Get(ctx, client, event.ChainID, event.BlockHash)
 		if err != nil {
-			return []Payment{{}}, ErrService.Wrap(err)
+			return []Payment{}, ErrService.Wrap(err)
 		}
 		price, err := service.tokenPrice.PriceAt(ctx, header.Timestamp)
 		if err != nil {
-			return []Payment{{}}, ErrService.Wrap(err)
+			return []Payment{}, ErrService.Wrap(err)
 		}
 
-		payments = append(payments, paymentFromEvent(endpoint.ChainID, iter.Event, header.Timestamp, price))
+		payments = append(payments, paymentFromEvent(event, header.Timestamp, price))
 		service.log.Debug("found payment",
 			zap.Int64("Chain ID", payments[len(payments)-1].ChainID),
 			zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
@@ -190,7 +125,7 @@ func (service *Service) retrievePaymentsForAddresses(ctx context.Context, endpoi
 			zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
 		)
 	}
-	return payments, ErrService.Wrap(errs.Combine(err, iter.Error(), iter.Close()))
+	return payments, ErrService.Wrap(err)
 }
 
 func getCurrentLatestBlock(ctx context.Context, endpoint common.EthEndpoint) (_ blockchain.Header, err error) {
@@ -253,25 +188,22 @@ func (service *Service) GetChainIds(ctx context.Context) (chainIds map[int64]str
 	return chainIds, nil
 }
 
-func paymentFromEvent(chainID int64, event *erc20.ERC20Transfer, timestamp time.Time, price currency.Amount) Payment {
-	tokenValue := currency.AmountFromBaseUnits(event.Value.Int64(), currency.StorjToken)
-	return Payment{
-		ChainID:     chainID,
-		From:        event.From,
-		To:          event.To,
-		TokenValue:  tokenValue,
-		USDValue:    tokenprice.CalculateValue(tokenValue, price),
-		BlockHash:   event.Raw.BlockHash,
-		BlockNumber: int64(event.Raw.BlockNumber),
-		Transaction: event.Raw.TxHash,
-		LogIndex:    int(event.Raw.Index),
-		Timestamp:   timestamp,
-	}
+// GetEndpoints returns the currently configured endpoints.
+func (service *Service) GetEndpoints() []common.EthEndpoint {
+	return service.endpoints
 }
 
-func asList(addresses map[common.Address]string) (res []common.Address) {
-	for k := range addresses {
-		res = append(res, k)
+func paymentFromEvent(event events.TransferEvent, timestamp time.Time, price currency.Amount) Payment {
+	return Payment{
+		ChainID:     event.ChainID,
+		From:        event.From,
+		To:          event.To,
+		TokenValue:  event.TokenValue,
+		USDValue:    tokenprice.CalculateValue(event.TokenValue, price),
+		BlockHash:   event.BlockHash,
+		BlockNumber: event.BlockNumber,
+		Transaction: event.TxHash,
+		LogIndex:    event.LogIndex,
+		Timestamp:   timestamp,
 	}
-	return res
 }
