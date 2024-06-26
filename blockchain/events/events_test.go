@@ -304,8 +304,14 @@ func testEventsCache(t *testing.T, connStr string) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(eventsList))
 
-		err = eventsCache.UpdateCache(ctx, ethEndpoints)
-		require.NoError(t, err)
+		// run the transfer events cache chore
+		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
+		defer ctx.Check(eventsCacheChore.Close)
+		ctx.Go(func() error {
+			return eventsCacheChore.Run(ctx)
+		})
+		eventsCacheChore.Loop.Pause()
+		eventsCacheChore.Loop.TriggerWait()
 
 		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), satelliteName, 0)
 		require.NoError(t, err)
