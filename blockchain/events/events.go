@@ -90,6 +90,7 @@ func (eventsCache *Cache) UpdateCache(ctx context.Context, endpoints []common.Et
 
 		latestChainBlockNumber, err := getChainLatestBlockNumber(ctx, endpoint.URL)
 		if err != nil {
+			eventsCache.log.Error("failed to get latest block number", zap.String("URL", endpoint.URL))
 			return err
 		}
 
@@ -100,6 +101,7 @@ func (eventsCache *Cache) UpdateCache(ctx context.Context, endpoints []common.Et
 
 		err = eventsCache.refreshEvents(ctx, endpoint, startSearch, latestChainBlockNumber)
 		if err != nil {
+			eventsCache.log.Error("failed to refresh events", zap.String("URL", endpoint.URL))
 			return err
 		}
 	}
@@ -141,6 +143,7 @@ func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.Eth
 	}
 	token, err := erc20.NewERC20(contractAdress, client)
 	if err != nil {
+		eventsCache.log.Error("failed to bind to ERC20 contract", zap.String("Contract", contractAdress.Hex()), zap.String("URL", endpoint.URL))
 		return err
 	}
 
@@ -151,7 +154,7 @@ func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.Eth
 	if (latestChainBlockNumber - start) > eventsCache.config.MaximumQuerySize {
 		start = latestChainBlockNumber - eventsCache.config.MaximumQuerySize
 	}
-	for j := 0; j < int(latestChainBlockNumber-start); j += eventsCache.config.BlockBatchSize {
+	for j := int(start); j < int(latestChainBlockNumber); j += eventsCache.config.BlockBatchSize {
 		end := uint64(j + eventsCache.config.BlockBatchSize)
 		opts := &bind.FilterOpts{
 			Start:   start,
@@ -187,6 +190,7 @@ func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.Eth
 func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID int64) error {
 	iter, err := token.FilterTransfer(opts, nil, addresses)
 	if err != nil {
+		eventsCache.log.Error("failed to search for transfer events", zap.Int64("Chain ID", chainID))
 		return err
 	}
 	defer func() { err = errs.Combine(err, errs.Wrap(iter.Close())) }()
