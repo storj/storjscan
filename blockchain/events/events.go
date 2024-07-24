@@ -31,56 +31,6 @@ type TransferEvent struct {
 	TokenValue  currency.Amount
 }
 
-// DB is an ERC20 contract transfer event cache.
-//
-// architecture: Database
-type DB interface {
-	// Insert inserts new transfer event to cache db.
-	Insert(ctx context.Context, transferEvent []TransferEvent) error
-	// GetBySatellite retrieves transfer events for satellite addresses on and after the given block number.
-	GetBySatellite(ctx context.Context, chainID uint64, satellite string, start uint64) ([]TransferEvent, error)
-	// GetByAddress retrieves transfer events for the wallet address on and after the given block number.
-	GetByAddress(ctx context.Context, chainID uint64, to common.Address, start uint64) ([]TransferEvent, error)
-	// GetLatestCachedBlockNumber retrieves the latest block number in the cache for the given chain.
-	GetLatestCachedBlockNumber(ctx context.Context, chainID uint64) (uint64, error)
-	// GetOldestCachedBlockNumber retrieves the oldest block number in the cache for the given chain.
-	GetOldestCachedBlockNumber(ctx context.Context, chainID uint64) (uint64, error)
-	// DeleteBefore deletes all transfer events before the given block number.
-	DeleteBefore(ctx context.Context, chainID uint64, before uint64) (err error)
-	// DeleteBlockAndAfter deletes transfer events from the block number and after.
-	DeleteBlockAndAfter(ctx context.Context, chainID uint64, block uint64) (err error)
-}
-
-// Cache for blockchain transfer events.
-type Cache struct {
-	log       *zap.Logger
-	eventsDB  DB
-	walletsDB wallets.DB
-
-	config Config
-}
-
-// NewEventsCache creates a new transfer events cache.
-func NewEventsCache(log *zap.Logger, eventsDB DB, walletsDB wallets.DB, config Config) *Cache {
-	return &Cache{
-		log:       log,
-		eventsDB:  eventsDB,
-		walletsDB: walletsDB,
-		config:    config,
-	}
-}
-
-// GetTransferEvents retrieves transfer events from the cache for the given wallet address or satellite.
-func (eventsCache *Cache) GetTransferEvents(ctx context.Context, chainID uint64, identifier interface{}, start uint64) ([]TransferEvent, error) {
-	switch value := identifier.(type) {
-	case string:
-		return eventsCache.eventsDB.GetBySatellite(ctx, chainID, value, start)
-	case common.Address:
-		return eventsCache.eventsDB.GetByAddress(ctx, chainID, value, start)
-	}
-	return nil, errs.New("invalid identifier type. Must be satellite or address.")
-}
-
 // Service for blockchain transfer events.
 type Service struct {
 	log       *zap.Logger

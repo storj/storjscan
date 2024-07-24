@@ -16,7 +16,6 @@ import (
 	"storj.io/private/migrate"
 	"storj.io/private/tagsql"
 	"storj.io/storjscan/blockchain"
-	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/tokenprice"
 	"storj.io/storjscan/wallets"
@@ -116,11 +115,6 @@ func (db *DB) MigrateToLatest(ctx context.Context) error {
 // Headers creates new headersDB with current DB connection.
 func (db *DB) Headers() blockchain.HeadersDB {
 	return &headersDB{db: db.DB}
-}
-
-// Events creates new eventssDB with current DB connection.
-func (db *DB) Events() events.DB {
-	return &eventsDB{db: db.DB}
 }
 
 // TokenPrice creates new PriceQuoteDB with current DB connection.
