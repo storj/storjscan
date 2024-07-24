@@ -17,15 +17,15 @@ var mon = monkit.Package()
 
 // Payment is on chain payment made for particular contract and deposit wallet.
 type Payment struct {
-	ChainID     int64
+	ChainID     uint64
 	From        common.Address
 	To          common.Address
 	TokenValue  currency.Amount
 	USDValue    currency.Amount
 	BlockHash   common.Hash
-	BlockNumber int64
+	BlockNumber uint64
 	Transaction common.Hash
-	LogIndex    int
+	LogIndex    uint
 	Timestamp   time.Time
 }
 

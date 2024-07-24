@@ -64,7 +64,7 @@ func TestEventsDBDelete(t *testing.T) {
 			testEvents = append(testEvents, events.TransferEvent{
 				ChainID:     1337,
 				BlockHash:   common.HashFromBytes(b),
-				BlockNumber: int64(i),
+				BlockNumber: uint64(i),
 				TxHash:      common.Hash{},
 				LogIndex:    10,
 				From:        common.Address{},
@@ -113,7 +113,7 @@ func TestEventsDBGet(t *testing.T) {
 			testEvents = append(testEvents, events.TransferEvent{
 				ChainID:     1337,
 				BlockHash:   common.HashFromBytes(b),
-				BlockNumber: int64(i),
+				BlockNumber: uint64(i),
 				TxHash:      common.Hash{},
 				LogIndex:    10,
 				From:        common.Address{},
@@ -161,7 +161,7 @@ func TestGetBlockNumber(t *testing.T) {
 			testEvents = append(testEvents, events.TransferEvent{
 				ChainID:     1337,
 				BlockHash:   common.HashFromBytes(b),
-				BlockNumber: int64(i),
+				BlockNumber: uint64(i),
 				TxHash:      common.Hash{},
 				LogIndex:    10,
 				From:        common.Address{},
@@ -297,10 +297,10 @@ func testEventsCache(t *testing.T, connStr string) {
 			MaximumQuerySize:     10000,
 		})
 
-		eventsList, err := eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), satelliteName, 0)
+		eventsList, err := eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), satelliteName, 0)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), accs[3].Address, 0)
+		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[3].Address, 0)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(eventsList))
 
@@ -313,13 +313,13 @@ func testEventsCache(t *testing.T, connStr string) {
 		eventsCacheChore.Loop.Pause()
 		eventsCacheChore.Loop.TriggerWait()
 
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), satelliteName, 0)
+		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), satelliteName, 0)
 		require.NoError(t, err)
 		require.Equal(t, 9, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), accs[3].Address, 0)
+		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[3].Address, 0)
 		require.NoError(t, err)
 		require.Equal(t, 6, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Int64(), accs[4].Address, 0)
+		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[4].Address, 0)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(eventsList))
 	})

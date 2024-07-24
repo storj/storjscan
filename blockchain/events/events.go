@@ -19,13 +19,13 @@ import (
 
 // TransferEvent holds a transfer event raised by an ERC20 contract.
 type TransferEvent struct {
-	ChainID     int64
+	ChainID     uint64
 	From        common.Address
 	To          common.Address
 	BlockHash   common.Hash
-	BlockNumber int64
+	BlockNumber uint64
 	TxHash      common.Hash
-	LogIndex    int
+	LogIndex    uint
 	TokenValue  currency.Amount
 }
 
@@ -36,17 +36,17 @@ type DB interface {
 	// Insert inserts new transfer event to cache db.
 	Insert(ctx context.Context, transferEvent []TransferEvent) error
 	// GetBySatellite retrieves transfer events for satellite addresses on and after the given block number.
-	GetBySatellite(ctx context.Context, chainID int64, satellite string, start uint64) ([]TransferEvent, error)
+	GetBySatellite(ctx context.Context, chainID uint64, satellite string, start uint64) ([]TransferEvent, error)
 	// GetByAddress retrieves transfer events for the wallet address on and after the given block number.
-	GetByAddress(ctx context.Context, chainID int64, to common.Address, start uint64) ([]TransferEvent, error)
+	GetByAddress(ctx context.Context, chainID uint64, to common.Address, start uint64) ([]TransferEvent, error)
 	// GetLatestCachedBlockNumber retrieves the latest block number in the cache for the given chain.
-	GetLatestCachedBlockNumber(ctx context.Context, chainID int64) (uint64, error)
+	GetLatestCachedBlockNumber(ctx context.Context, chainID uint64) (uint64, error)
 	// GetOldestCachedBlockNumber retrieves the oldest block number in the cache for the given chain.
-	GetOldestCachedBlockNumber(ctx context.Context, chainID int64) (uint64, error)
+	GetOldestCachedBlockNumber(ctx context.Context, chainID uint64) (uint64, error)
 	// DeleteBefore deletes all transfer events before the given block number.
-	DeleteBefore(ctx context.Context, chainID int64, before uint64) (err error)
+	DeleteBefore(ctx context.Context, chainID uint64, before uint64) (err error)
 	// DeleteBlockAndAfter deletes transfer events from the block number and after.
-	DeleteBlockAndAfter(ctx context.Context, chainID int64, block uint64) (err error)
+	DeleteBlockAndAfter(ctx context.Context, chainID uint64, block uint64) (err error)
 }
 
 // Cache for blockchain transfer events.
@@ -69,7 +69,7 @@ func NewEventsCache(log *zap.Logger, eventsDB DB, walletsDB wallets.DB, config C
 }
 
 // GetTransferEvents retrieves transfer events from the cache for the given wallet address or satellite.
-func (eventsCache *Cache) GetTransferEvents(ctx context.Context, chainID int64, identifier interface{}, start uint64) ([]TransferEvent, error) {
+func (eventsCache *Cache) GetTransferEvents(ctx context.Context, chainID uint64, identifier interface{}, start uint64) ([]TransferEvent, error) {
 	switch value := identifier.(type) {
 	case string:
 		return eventsCache.eventsDB.GetBySatellite(ctx, chainID, value, start)
@@ -109,7 +109,7 @@ func (eventsCache *Cache) UpdateCache(ctx context.Context, endpoints []common.Et
 }
 
 // removes pending blocks from the cache (if any) and returns with the latest confirmed block number in the cache.
-func (eventsCache *Cache) removePendingBlocks(ctx context.Context, latestCachedBlockNumber, latestChainBlockNumber uint64, chainID int64) (_ uint64, err error) {
+func (eventsCache *Cache) removePendingBlocks(ctx context.Context, latestCachedBlockNumber, latestChainBlockNumber uint64, chainID uint64) (_ uint64, err error) {
 	startSearch := uint64(0)
 	if latestCachedBlockNumber > 0 {
 		startSearch = latestCachedBlockNumber + 1
@@ -187,10 +187,10 @@ func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.Eth
 	return nil
 }
 
-func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID int64) error {
+func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID uint64) error {
 	iter, err := token.FilterTransfer(opts, nil, addresses)
 	if err != nil {
-		eventsCache.log.Error("failed to search for transfer events", zap.Int64("Chain ID", chainID))
+		eventsCache.log.Error("failed to search for transfer events", zap.Uint64("Chain ID", chainID))
 		return err
 	}
 	defer func() { err = errs.Combine(err, errs.Wrap(iter.Close())) }()
@@ -198,7 +198,7 @@ func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, 
 	newEvents := make([]TransferEvent, 0)
 	for iter.Next() {
 		eventsCache.log.Debug("found transfer event",
-			zap.Int64("Chain ID", chainID),
+			zap.Uint64("Chain ID", chainID),
 			zap.String("From", iter.Event.From.String()),
 			zap.String("To", iter.Event.To.String()),
 			zap.String("Transaction Hash", iter.Event.Raw.TxHash.String()),
@@ -211,9 +211,9 @@ func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, 
 			From:        iter.Event.From,
 			To:          iter.Event.To,
 			BlockHash:   iter.Event.Raw.BlockHash,
-			BlockNumber: int64(iter.Event.Raw.BlockNumber),
+			BlockNumber: iter.Event.Raw.BlockNumber,
 			TxHash:      iter.Event.Raw.TxHash,
-			LogIndex:    int(iter.Event.Raw.Index),
+			LogIndex:    iter.Event.Raw.Index,
 			TokenValue:  tokenValue,
 		})
 	}

@@ -55,11 +55,11 @@ func (endpoint *Endpoint) Payments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from := map[int64]int64{}
+	from := map[uint64]uint64{}
 	for _, ethEndpoint := range endpoint.service.endpoints {
 		from[ethEndpoint.ChainID] = 0
-		if s := r.URL.Query().Get(strconv.FormatInt(ethEndpoint.ChainID, 10)); s != "" {
-			block, err := strconv.ParseInt(s, 10, 64)
+		if s := r.URL.Query().Get(strconv.FormatUint(ethEndpoint.ChainID, 10)); s != "" {
+			block, err := strconv.ParseUint(s, 10, 64)
 			if err != nil {
 				api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 				return
@@ -87,11 +87,11 @@ func (endpoint *Endpoint) AllPayments(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer mon.Task()(&ctx)(&err)
 
-	from := map[int64]int64{}
+	from := map[uint64]uint64{}
 	for _, ethEndpoint := range endpoint.service.endpoints {
 		from[ethEndpoint.ChainID] = 0
-		if s := r.URL.Query().Get(strconv.FormatInt(ethEndpoint.ChainID, 10)); s != "" {
-			block, err := strconv.ParseInt(s, 10, 64)
+		if s := r.URL.Query().Get(strconv.FormatUint(ethEndpoint.ChainID, 10)); s != "" {
+			block, err := strconv.ParseUint(s, 10, 64)
 			if err != nil {
 				api.ServeJSONError(endpoint.log, w, http.StatusBadRequest, ErrEndpoint.Wrap(err))
 				return

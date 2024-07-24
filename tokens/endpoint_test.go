@@ -194,7 +194,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			latestBlockHeader := blockchain.Header{
 				ChainID:   ethEndpoints[0].ChainID,
 				Hash:      currentHead.Hash(),
-				Number:    currentHead.Number.Int64(),
+				Number:    currentHead.Number.Uint64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
 			}
 
@@ -207,9 +207,9 @@ func testEndpoint(t *testing.T, connStr string) {
 			require.EqualValues(t, 1000000, payments.Payments[0].TokenValue.BaseUnits())
 			require.EqualValues(t, tokenprice.CalculateValue(currency.AmountFromBaseUnits(1000000, currency.StorjToken), price), payments.Payments[0].USDValue)
 			require.Equal(t, recpt.BlockHash, payments.Payments[0].BlockHash)
-			require.Equal(t, recpt.BlockNumber.Int64(), payments.Payments[0].BlockNumber)
+			require.Equal(t, recpt.BlockNumber.Uint64(), payments.Payments[0].BlockNumber)
 			require.Equal(t, tx.Hash(), payments.Payments[0].Transaction)
-			require.Equal(t, 0, payments.Payments[0].LogIndex)
+			require.Equal(t, uint(0), payments.Payments[0].LogIndex)
 		})
 
 		t.Run("/payments REST endpoint is working", func(t *testing.T) {
@@ -236,7 +236,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			latestBlockHeader := blockchain.Header{
 				ChainID:   ethEndpoints[0].ChainID,
 				Hash:      currentHead.Hash(),
-				Number:    currentHead.Number.Int64(),
+				Number:    currentHead.Number.Uint64(),
 				Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
 			}
 

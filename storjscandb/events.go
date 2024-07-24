@@ -75,9 +75,9 @@ func (eventsDB eventsDB) Insert(ctx context.Context, transferEvent []events.Tran
 	)
 	for i := range transferEvent {
 		event := transferEvent[i]
-		chainIDs = append(chainIDs, event.ChainID)
+		chainIDs = append(chainIDs, int64(event.ChainID))
 		blockHashes = append(blockHashes, event.BlockHash[:])
-		blockNumbers = append(blockNumbers, event.BlockNumber)
+		blockNumbers = append(blockNumbers, int64(event.BlockNumber))
 		transactions = append(transactions, event.TxHash[:])
 		logIndexes = append(logIndexes, int32(event.LogIndex))
 		fromAddresses = append(fromAddresses, event.From[:])
@@ -98,7 +98,7 @@ func (eventsDB eventsDB) Insert(ctx context.Context, transferEvent []events.Tran
 	return err
 }
 
-func (eventsDB eventsDB) GetBySatellite(ctx context.Context, chainID int64, satellite string, start uint64) (_ []events.TransferEvent, err error) {
+func (eventsDB eventsDB) GetBySatellite(ctx context.Context, chainID uint64, satellite string, start uint64) (_ []events.TransferEvent, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
@@ -123,14 +123,14 @@ func (eventsDB eventsDB) GetBySatellite(ctx context.Context, chainID int64, sate
 	return list, dbxEvents.Err()
 }
 
-func (eventsDB eventsDB) GetByAddress(ctx context.Context, chainID int64, to common.Address, start uint64) (_ []events.TransferEvent, err error) {
+func (eventsDB eventsDB) GetByAddress(ctx context.Context, chainID uint64, to common.Address, start uint64) (_ []events.TransferEvent, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
 		return []events.TransferEvent{}, ErrEventsDB.New("invalid chainID 0 specified")
 	}
 	dbxEvents, err := eventsDB.db.All_TransferEvent_By_ChainId_And_ToAddress_And_BlockNumber_GreaterOrEqual_OrderBy_Asc_BlockNumber(ctx,
-		dbx.TransferEvent_ChainId(chainID),
+		dbx.TransferEvent_ChainId(int64(chainID)),
 		dbx.TransferEvent_ToAddress(to[:]),
 		dbx.TransferEvent_BlockNumber(int64(start)))
 	if err != nil {
@@ -145,13 +145,13 @@ func (eventsDB eventsDB) GetByAddress(ctx context.Context, chainID int64, to com
 	return list, nil
 }
 
-func (eventsDB eventsDB) GetLatestCachedBlockNumber(ctx context.Context, chainID int64) (_ uint64, err error) {
+func (eventsDB eventsDB) GetLatestCachedBlockNumber(ctx context.Context, chainID uint64) (_ uint64, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
 		return 0, ErrEventsDB.New("invalid chainID 0 specified")
 	}
-	dbxEvent, err := eventsDB.db.First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Desc_BlockNumber(ctx, dbx.TransferEvent_ChainId(chainID))
+	dbxEvent, err := eventsDB.db.First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Desc_BlockNumber(ctx, dbx.TransferEvent_ChainId(int64(chainID)))
 	if dbxEvent == nil {
 		return 0, nil
 	}
@@ -161,13 +161,13 @@ func (eventsDB eventsDB) GetLatestCachedBlockNumber(ctx context.Context, chainID
 	return uint64(dbxEvent.BlockNumber), nil
 }
 
-func (eventsDB eventsDB) GetOldestCachedBlockNumber(ctx context.Context, chainID int64) (_ uint64, err error) {
+func (eventsDB eventsDB) GetOldestCachedBlockNumber(ctx context.Context, chainID uint64) (_ uint64, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
 		return 0, ErrEventsDB.New("invalid chainID 0 specified")
 	}
-	dbxEvent, err := eventsDB.db.First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Asc_BlockNumber(ctx, dbx.TransferEvent_ChainId(chainID))
+	dbxEvent, err := eventsDB.db.First_TransferEvent_BlockNumber_By_ChainId_OrderBy_Asc_BlockNumber(ctx, dbx.TransferEvent_ChainId(int64(chainID)))
 	if dbxEvent == nil {
 		return 0, nil
 	}
@@ -177,36 +177,36 @@ func (eventsDB eventsDB) GetOldestCachedBlockNumber(ctx context.Context, chainID
 	return uint64(dbxEvent.BlockNumber), nil
 }
 
-func (eventsDB eventsDB) DeleteBlockAndAfter(ctx context.Context, chainID int64, block uint64) (err error) {
+func (eventsDB eventsDB) DeleteBlockAndAfter(ctx context.Context, chainID uint64, block uint64) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
 		return ErrEventsDB.New("invalid chainID 0 specified")
 	}
-	_, err = eventsDB.db.Delete_TransferEvent_By_ChainId_And_BlockNumber_GreaterOrEqual(ctx, dbx.TransferEvent_ChainId(chainID), dbx.TransferEvent_BlockNumber(int64(block)))
+	_, err = eventsDB.db.Delete_TransferEvent_By_ChainId_And_BlockNumber_GreaterOrEqual(ctx, dbx.TransferEvent_ChainId(int64(chainID)), dbx.TransferEvent_BlockNumber(int64(block)))
 	return ErrEventsDB.Wrap(err)
 }
 
-func (eventsDB eventsDB) DeleteBefore(ctx context.Context, chainID int64, before uint64) (err error) {
+func (eventsDB eventsDB) DeleteBefore(ctx context.Context, chainID uint64, before uint64) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	if chainID == 0 {
 		return ErrEventsDB.New("invalid chainID 0 specified")
 	}
-	_, err = eventsDB.db.Delete_TransferEvent_By_ChainId_And_BlockNumber_Less(ctx, dbx.TransferEvent_ChainId(chainID), dbx.TransferEvent_BlockNumber(int64(before)))
+	_, err = eventsDB.db.Delete_TransferEvent_By_ChainId_And_BlockNumber_Less(ctx, dbx.TransferEvent_ChainId(int64(chainID)), dbx.TransferEvent_BlockNumber(int64(before)))
 	return ErrEventsDB.Wrap(err)
 }
 
 // fromDBXEvent converts dbx log transfer event to blockchain.TransferEvent type.
 func fromDBXEvent(dbxEvent *dbx.TransferEvent) events.TransferEvent {
 	return events.TransferEvent{
-		ChainID:     dbxEvent.ChainId,
+		ChainID:     uint64(dbxEvent.ChainId),
 		From:        common.Address(dbxEvent.FromAddress),
 		To:          common.Address(dbxEvent.ToAddress),
 		BlockHash:   common.Hash(dbxEvent.BlockHash),
-		BlockNumber: dbxEvent.BlockNumber,
+		BlockNumber: uint64(dbxEvent.BlockNumber),
 		TxHash:      common.Hash(dbxEvent.Transaction),
-		LogIndex:    dbxEvent.LogIndex,
+		LogIndex:    uint(dbxEvent.LogIndex),
 		TokenValue:  currency.AmountFromBaseUnits(dbxEvent.TokenValue, currency.StorjToken),
 	}
 }

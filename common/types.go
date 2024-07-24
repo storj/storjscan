@@ -13,7 +13,7 @@ type EthEndpoint struct {
 	Name     string `json:"name"`
 	URL      string `json:"url"`
 	Contract string `json:"contract"`
-	ChainID  int64  `json:"chainId,string,omitempty"`
+	ChainID  uint64 `json:"chainId,string,omitempty"`
 }
 
 // Address is wallet address on eth chain.

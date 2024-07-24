@@ -22,9 +22,9 @@ var (
 // Header holds ethereum blockchain block header indexed data.
 // No need to keep number as big.Int right now as block count on ethereum mainnet is far from overflowing int64 capacity.
 type Header struct {
-	ChainID   int64
+	ChainID   uint64
 	Hash      common.Hash
-	Number    int64
+	Number    uint64
 	Timestamp time.Time
 }
 
@@ -35,13 +35,13 @@ type HeadersDB interface {
 	// Insert inserts new header to cache db.
 	Insert(ctx context.Context, header Header) error
 	// Delete deletes header from db by hash.
-	Delete(ctx context.Context, ChainID int64, hash common.Hash) error
+	Delete(ctx context.Context, ChainID uint64, hash common.Hash) error
 	// DeleteBefore deletes headers before the given time.
 	DeleteBefore(ctx context.Context, before time.Time) (err error)
 	// Get retrieves header by hash.
-	Get(ctx context.Context, ChainID int64, hash common.Hash) (Header, error)
+	Get(ctx context.Context, ChainID uint64, hash common.Hash) (Header, error)
 	// GetByNumber retrieves header by number.
-	GetByNumber(ctx context.Context, ChainID int64, number int64) (Header, error)
+	GetByNumber(ctx context.Context, ChainID uint64, number uint64) (Header, error)
 	// List retrieves all headers stored in cache db.
 	List(ctx context.Context) ([]Header, error)
 }
@@ -62,8 +62,8 @@ func NewHeadersCache(log *zap.Logger, db HeadersDB) *HeadersCache {
 
 // Get retrieves block header from cache storage or fetches header from client and caches it.
 // TODO: remove direct dependency on go-eth client from public API.
-func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, chainID int64, hash common.Hash) (Header, error) {
-	headersCache.log.Debug("fetching header", zap.Int64("Chain ID", chainID), zap.String("hash", hash.String()))
+func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Client, chainID uint64, hash common.Hash) (Header, error) {
+	headersCache.log.Debug("fetching header", zap.Uint64("Chain ID", chainID), zap.String("hash", hash.String()))
 	header, err := headersCache.db.Get(ctx, chainID, hash)
 	switch {
 	case err == nil:
@@ -80,13 +80,13 @@ func (headersCache *HeadersCache) Get(ctx context.Context, client *ethclient.Cli
 			// format.
 			Hash:      hash,
 			ChainID:   chainID,
-			Number:    ethHeader.Number.Int64(),
+			Number:    ethHeader.Number.Uint64(),
 			Timestamp: time.Unix(int64(ethHeader.Time), 0).UTC(),
 		}
 		if chainID == 1 && ethHeader.Hash() != hash {
 			headersCache.log.Warn("ethereum header hash mismatch! geth library may be out of date.", zap.String("geth hash", ethHeader.Hash().String()), zap.String("node hash", hash.String()))
 		}
-		headersCache.log.Debug("header not found: inserting new header", zap.Int64("Chain ID", header.ChainID), zap.String("hash", header.Hash.String()))
+		headersCache.log.Debug("header not found: inserting new header", zap.Uint64("Chain ID", header.ChainID), zap.String("hash", header.Hash.String()))
 		if err = headersCache.db.Insert(ctx, header); err != nil {
 			return Header{}, err
 		}
