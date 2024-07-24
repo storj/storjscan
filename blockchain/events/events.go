@@ -5,6 +5,7 @@ package events
 
 import (
 	"context"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -12,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"storj.io/common/currency"
+	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/tokens/erc20"
 	"storj.io/storjscan/wallets"
@@ -79,83 +81,111 @@ func (eventsCache *Cache) GetTransferEvents(ctx context.Context, chainID uint64,
 	return nil, errs.New("invalid identifier type. Must be satellite or address.")
 }
 
-// UpdateCache updates the cache with the latest transfer events from the blockchain.
-func (eventsCache *Cache) UpdateCache(ctx context.Context, endpoints []common.EthEndpoint) error {
+// Service for blockchain transfer events.
+type Service struct {
+	log       *zap.Logger
+	walletsDB wallets.DB
 
-	for _, endpoint := range endpoints {
-		latestCachedBlockNumber, err := eventsCache.eventsDB.GetLatestCachedBlockNumber(ctx, endpoint.ChainID)
-		if err != nil {
-			return err
-		}
-
-		latestChainBlockNumber, err := getChainLatestBlockNumber(ctx, endpoint.URL)
-		if err != nil {
-			eventsCache.log.Error("failed to get latest block number", zap.String("URL", endpoint.URL))
-			return err
-		}
-
-		startSearch, err := eventsCache.removePendingBlocks(ctx, latestCachedBlockNumber, latestChainBlockNumber, endpoint.ChainID)
-		if err != nil {
-			return err
-		}
-
-		err = eventsCache.refreshEvents(ctx, endpoint, startSearch, latestChainBlockNumber)
-		if err != nil {
-			eventsCache.log.Error("failed to refresh events", zap.String("URL", endpoint.URL))
-			return err
-		}
-	}
-	return nil
+	config Config
+	// map satellite and chainID to the last scanned block number
+	lastScannedBlock map[string]map[uint64]uint64
 }
 
-// removes pending blocks from the cache (if any) and returns with the latest confirmed block number in the cache.
-func (eventsCache *Cache) removePendingBlocks(ctx context.Context, latestCachedBlockNumber, latestChainBlockNumber uint64, chainID uint64) (_ uint64, err error) {
-	startSearch := uint64(0)
-	if latestCachedBlockNumber > 0 {
-		startSearch = latestCachedBlockNumber + 1
+// NewEventsService creates a new transfer events service.
+func NewEventsService(log *zap.Logger, walletsDB wallets.DB, config Config) *Service {
+	lastScannedBlock := make(map[string]map[uint64]uint64)
+	return &Service{
+		log:              log,
+		walletsDB:        walletsDB,
+		config:           config,
+		lastScannedBlock: lastScannedBlock,
 	}
-	if latestCachedBlockNumber+eventsCache.config.ChainReorgBuffer > latestChainBlockNumber {
-		// need to remove the "pending blocks"
-		if startSearch > eventsCache.config.ChainReorgBuffer {
-			if latestChainBlockNumber > latestCachedBlockNumber {
-				startSearch = startSearch - eventsCache.config.ChainReorgBuffer + (latestChainBlockNumber - latestCachedBlockNumber)
-			} else {
-				startSearch -= eventsCache.config.ChainReorgBuffer
-			}
-			err = eventsCache.eventsDB.DeleteBlockAndAfter(ctx, chainID, startSearch)
+}
+
+// GetForSatellite returns with the latest transfer events from the blockchain for a given satellite.
+func (events *Service) GetForSatellite(ctx context.Context, endpoints []common.EthEndpoint, satelliteID string, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
+	lastScan := events.lastScannedBlock[satelliteID]
+	for chain, block := range lastScan {
+		if from[chain] < block {
+			from[chain] = block
+		}
+	}
+	wallets, err := events.walletsDB.ListBySatellite(ctx, satelliteID)
+	if err != nil {
+		return nil, nil, err
+	}
+	walletsList := make([]common.Address, 0, len(wallets))
+	for wallet := range wallets {
+		walletsList = append(walletsList, wallet)
+	}
+	updatedScannedBlocks, newEvents, err := events.getEvents(ctx, endpoints, walletsList, from)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for chain, block := range updatedScannedBlocks {
+		if block.Number > events.config.ChainReorgBuffer {
+			events.lastScannedBlock[satelliteID] = map[uint64]uint64{chain: block.Number - events.config.ChainReorgBuffer}
 		} else {
-			startSearch = 0
+			events.lastScannedBlock[satelliteID] = map[uint64]uint64{chain: 0}
 		}
 	}
-	return startSearch, err
+	return updatedScannedBlocks, newEvents, nil
 }
 
-func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.EthEndpoint, start, latestChainBlockNumber uint64) error {
+// GetForAddress returns with the latest transfer events from the blockchain for a given address.
+func (events *Service) GetForAddress(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
+	return events.getEvents(ctx, endpoints, address, from)
+}
+
+func (events *Service) getEvents(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
+	scannedBlocks := make(map[uint64]blockchain.Header)
+	newEvents := make([]TransferEvent, 0)
+	for _, endpoint := range endpoints {
+		latestChainBlockHeader, err := getChainLatestBlockHeader(ctx, endpoint.URL, endpoint.ChainID)
+		if err != nil {
+			events.log.Error("failed to get latest block number", zap.String("URL", endpoint.URL))
+			return nil, nil, err
+		}
+
+		endpointEvents, err := events.getEventsForEndpoint(ctx, endpoint, from[endpoint.ChainID], latestChainBlockHeader.Number, address)
+		if err != nil {
+			events.log.Error("failed to refresh events", zap.String("URL", endpoint.URL))
+			return nil, nil, err
+		}
+		scannedBlocks[endpoint.ChainID] = latestChainBlockHeader
+		newEvents = append(newEvents, endpointEvents...)
+	}
+	return scannedBlocks, newEvents, nil
+}
+
+func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common.EthEndpoint, start, latestChainBlockNumber uint64, walletsList []common.Address) ([]TransferEvent, error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer client.Close()
 
 	contractAdress, err := common.AddressFromHex(endpoint.Contract)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	token, err := erc20.NewERC20(contractAdress, client)
 	if err != nil {
-		eventsCache.log.Error("failed to bind to ERC20 contract", zap.String("Contract", contractAdress.Hex()), zap.String("URL", endpoint.URL))
-		return err
+		events.log.Error("failed to bind to ERC20 contract", zap.String("Contract", contractAdress.Hex()), zap.String("URL", endpoint.URL))
+		return nil, err
 	}
 
 	// shouldn't happen, but just in case
 	if start > latestChainBlockNumber {
-		return nil
+		return nil, nil
 	}
-	if (latestChainBlockNumber - start) > eventsCache.config.MaximumQuerySize {
-		start = latestChainBlockNumber - eventsCache.config.MaximumQuerySize
+	if (latestChainBlockNumber - start) > events.config.MaximumQuerySize {
+		start = latestChainBlockNumber - events.config.MaximumQuerySize
 	}
-	for j := int(start); j < int(latestChainBlockNumber); j += eventsCache.config.BlockBatchSize {
-		end := uint64(j + eventsCache.config.BlockBatchSize)
+	newEvents := make([]TransferEvent, 0)
+	for j := int(start); j < int(latestChainBlockNumber); j += events.config.BlockBatchSize {
+		end := uint64(j + events.config.BlockBatchSize)
 		opts := &bind.FilterOpts{
 			Start:   start,
 			End:     &end,
@@ -165,39 +195,34 @@ func (eventsCache *Cache) refreshEvents(ctx context.Context, endpoint common.Eth
 			opts.End = nil
 		}
 
-		allWallets, err := eventsCache.walletsDB.ListAll(ctx)
-		if err != nil {
-			return err
-		}
-		walletsList := asList(allWallets)
-
-		for i := 0; i < len(walletsList); i += eventsCache.config.AddressBatchSize {
+		for i := 0; i < len(walletsList); i += events.config.AddressBatchSize {
 			var addresses []common.Address
 
-			for a := i; a-i < eventsCache.config.AddressBatchSize && a < len(allWallets); a++ {
+			for a := i; a-i < events.config.AddressBatchSize && a < len(walletsList); a++ {
 				addresses = append(addresses, walletsList[a])
 			}
 
-			err := eventsCache.processBatch(ctx, token, opts, addresses, endpoint.ChainID)
+			batchEvents, err := events.processBatch(token, opts, addresses, endpoint.ChainID)
 			if err != nil {
-				return err
+				return nil, err
 			}
+			newEvents = append(newEvents, batchEvents...)
 		}
 	}
-	return nil
+	return newEvents, nil
 }
 
-func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID uint64) error {
+func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID uint64) ([]TransferEvent, error) {
 	iter, err := token.FilterTransfer(opts, nil, addresses)
 	if err != nil {
-		eventsCache.log.Error("failed to search for transfer events", zap.Uint64("Chain ID", chainID))
-		return err
+		events.log.Error("failed to search for transfer events", zap.Uint64("Chain ID", chainID))
+		return nil, err
 	}
 	defer func() { err = errs.Combine(err, errs.Wrap(iter.Close())) }()
 
 	newEvents := make([]TransferEvent, 0)
 	for iter.Next() {
-		eventsCache.log.Debug("found transfer event",
+		events.log.Debug("found transfer event",
 			zap.Uint64("Chain ID", chainID),
 			zap.String("From", iter.Event.From.String()),
 			zap.String("To", iter.Event.To.String()),
@@ -217,29 +242,24 @@ func (eventsCache *Cache) processBatch(ctx context.Context, token *erc20.ERC20, 
 			TokenValue:  tokenValue,
 		})
 	}
-	if err := eventsCache.eventsDB.Insert(ctx, newEvents); err != nil {
-		return err
-	}
-	return nil
+	return newEvents, nil
 }
 
-func getChainLatestBlockNumber(ctx context.Context, url string) (_ uint64, err error) {
+func getChainLatestBlockHeader(ctx context.Context, url string, chainID uint64) (_ blockchain.Header, err error) {
 	client, err := ethclient.DialContext(ctx, url)
 	if err != nil {
-		return 0, err
+		return blockchain.Header{}, err
 	}
 	defer client.Close()
 
 	latestBlock, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
-		return 0, err
+		return blockchain.Header{}, err
 	}
-	return uint64(latestBlock.Number.Int64()), nil
-}
-
-func asList(addresses map[common.Address]string) (res []common.Address) {
-	for k := range addresses {
-		res = append(res, k)
-	}
-	return res
+	return blockchain.Header{
+		Hash:      latestBlock.Hash(),
+		Number:    latestBlock.Number.Uint64(),
+		ChainID:   chainID,
+		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),
+	}, nil
 }

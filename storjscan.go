@@ -47,8 +47,6 @@ type Config struct {
 type DB interface {
 	// Headers creates headers database methods.
 	Headers() blockchain.HeadersDB
-	// Events creates events database methods.
-	Events() events.DB
 	// TokenPrice returns database for STORJ token price information.
 	TokenPrice() tokenprice.PriceQuoteDB
 	// Wallets returns database for deposit address information.
@@ -72,10 +70,9 @@ type App struct {
 	}
 
 	Blockchain struct {
-		HeadersCache     *blockchain.HeadersCache
-		EventsCache      *events.Cache
-		EventsCacheChore *events.Chore
-		CleanupChore     *headerCleanup.Chore
+		HeadersCache *blockchain.HeadersCache
+		Events       *events.Service
+		CleanupChore *headerCleanup.Chore
 	}
 
 	Tokens struct {
@@ -117,8 +114,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 	{ // blockchain
 		app.Blockchain.HeadersCache = blockchain.NewHeadersCache(log.Named("blockchain:headers-cache"),
 			db.Headers())
-		app.Blockchain.EventsCache = events.NewEventsCache(log.Named("blockchain:events-cache"),
-			db.Events(), db.Wallets(), config.Blockchain)
+		app.Blockchain.Events = events.NewEventsService(log.Named("blockchain:events-service"),
+			db.Wallets(), config.Blockchain)
 	}
 
 	{ // token price
@@ -148,16 +145,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			endpoints,
 			app.Blockchain.HeadersCache,
-			app.Blockchain.EventsCache,
+			app.Blockchain.Events,
 			app.TokenPrice.Service)
-
-		app.Blockchain.EventsCacheChore = events.NewChore(log.Named("blockchain:events-cache:chore"),
-			app.Blockchain.EventsCache, endpoints, config.Events.CacheRefreshInterval)
-		app.Services.Add(lifecycle.Item{
-			Name:  "eventscache:chore",
-			Run:   app.Blockchain.EventsCacheChore.Run,
-			Close: app.Blockchain.EventsCacheChore.Close,
-		})
 
 		app.Tokens.Endpoint = tokens.NewEndpoint(log.Named("tokens:endpoint"), app.Tokens.Service)
 	}

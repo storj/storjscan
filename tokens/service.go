@@ -33,7 +33,7 @@ type Service struct {
 	log          *zap.Logger
 	endpoints    []common.EthEndpoint
 	headersCache *blockchain.HeadersCache
-	eventsCache  *events.Cache
+	events       *events.Service
 	tokenPrice   *tokenprice.Service
 }
 
@@ -42,13 +42,13 @@ func NewService(
 	log *zap.Logger,
 	endpoints []common.EthEndpoint,
 	headersCache *blockchain.HeadersCache,
-	eventsCache *events.Cache,
+	events *events.Service,
 	tokenPrice *tokenprice.Service) *Service {
 	return &Service{
 		log:          log,
 		endpoints:    endpoints,
 		headersCache: headersCache,
-		eventsCache:  eventsCache,
+		events:       events,
 		tokenPrice:   tokenPrice,
 	}
 }
@@ -57,37 +57,33 @@ func NewService(
 func (service *Service) Payments(ctx context.Context, address common.Address, from map[uint64]uint64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
-	return service.payments(ctx, address, from)
+	lastestBlocks, newEvents, err := service.events.GetForAddress(ctx, service.endpoints, []common.Address{address}, from)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
+	}
+	return service.toPayments(ctx, lastestBlocks, newEvents)
 }
 
 // AllPayments returns all the payments across all configured endpoints starting from a particular block per chain associated with the current satellite.
 func (service *Service) AllPayments(ctx context.Context, satelliteID string, from map[uint64]uint64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for satellite", zap.String("satelliteID", satelliteID))
-
-	if satelliteID == "" {
-		// it shouldn't be possible if auth is properly set up
-		return LatestPayments{}, ErrService.New("api identifier is empty")
+	lastestBlocks, newEvents, err := service.events.GetForSatellite(ctx, service.endpoints, satelliteID, from)
+	if err != nil {
+		return LatestPayments{}, ErrService.Wrap(err)
 	}
-	return service.payments(ctx, satelliteID, from)
+	return service.toPayments(ctx, lastestBlocks, newEvents)
 }
 
-func (service *Service) payments(ctx context.Context, identifier interface{}, from map[uint64]uint64) (_ LatestPayments, err error) {
+func (service *Service) toPayments(ctx context.Context, scannedBlocks map[uint64]blockchain.Header, newEvents []events.TransferEvent) (_ LatestPayments, err error) {
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
+		payments, err := service.toPaymentsForEndpoint(ctx, endpoint, newEvents)
 		if err != nil {
 			return LatestPayments{}, ErrService.Wrap(err)
 		}
-		latestBlock, err := getCurrentLatestBlock(ctx, endpoint)
-		if err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
-		}
-		payments, err := service.retrievePayments(ctx, endpoint, identifier, from[endpoint.ChainID])
-		if err != nil {
-			return LatestPayments{}, ErrService.Wrap(err)
-		}
-		latestBlocks = append(latestBlocks, latestBlock)
+		latestBlocks = append(latestBlocks, scannedBlocks[endpoint.ChainID])
 		allPayments = append(allPayments, payments...)
 	}
 
@@ -97,16 +93,15 @@ func (service *Service) payments(ctx context.Context, identifier interface{}, fr
 	}, nil
 }
 
-func (service *Service) retrievePayments(ctx context.Context, endpoint common.EthEndpoint, identifier interface{}, start uint64) (_ []Payment, err error) {
+func (service *Service) toPaymentsForEndpoint(ctx context.Context, endpoint common.EthEndpoint, newEvents []events.TransferEvent) (_ []Payment, err error) {
 	client, err := ethclient.DialContext(ctx, endpoint.URL)
 	if err != nil {
 		return []Payment{}, ErrService.Wrap(err)
 	}
 	defer client.Close()
 
-	transferEvents, err := service.eventsCache.GetTransferEvents(ctx, endpoint.ChainID, identifier, start)
 	var payments []Payment
-	for _, event := range transferEvents {
+	for _, event := range newEvents {
 		header, err := service.headersCache.Get(ctx, client, event.ChainID, event.BlockHash)
 		if err != nil {
 			return []Payment{}, ErrService.Wrap(err)
@@ -126,29 +121,6 @@ func (service *Service) retrievePayments(ctx context.Context, endpoint common.Et
 		)
 	}
 	return payments, ErrService.Wrap(err)
-}
-
-func getCurrentLatestBlock(ctx context.Context, endpoint common.EthEndpoint) (_ blockchain.Header, err error) {
-	client, err := ethclient.DialContext(ctx, endpoint.URL)
-	if err != nil {
-		return blockchain.Header{}, ErrService.Wrap(err)
-	}
-	defer client.Close()
-
-	if err != nil {
-		return blockchain.Header{}, ErrService.Wrap(err)
-	}
-
-	latestBlock, err := client.HeaderByNumber(ctx, nil)
-	if err != nil {
-		return blockchain.Header{}, ErrService.Wrap(err)
-	}
-	return blockchain.Header{
-		ChainID:   endpoint.ChainID,
-		Hash:      latestBlock.Hash(),
-		Number:    latestBlock.Number.Uint64(),
-		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),
-	}, nil
 }
 
 // PingAll checks if configured blockchain services are available for use.

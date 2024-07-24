@@ -54,10 +54,6 @@ func (chore *Chore) Run(ctx context.Context) (err error) {
 // RunOnce updates the log transfer events cache.
 func (chore *Chore) RunOnce(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
-	err = chore.eventsCache.UpdateCache(ctx, chore.endpoints)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

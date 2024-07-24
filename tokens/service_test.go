@@ -123,16 +123,14 @@ func testPayments(t *testing.T, connStr string) {
 		require.NoError(t, err)
 
 		headersCache := blockchain.NewHeadersCache(logger, db.Headers())
-		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
-			CacheRefreshInterval: 10,
-			AddressBatchSize:     100,
-			BlockBatchSize:       100,
-			ChainReorgBuffer:     15,
-			MaximumQuerySize:     10000,
+		events := events.NewEventsService(logger, db.Wallets(), events.Config{
+			AddressBatchSize: 100,
+			BlockBatchSize:   100,
+			ChainReorgBuffer: 15,
+			MaximumQuerySize: 10000,
 		})
-		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, ethEndpoints, headersCache, eventsCache, tokenPrice)
+		service := tokens.NewService(logger, ethEndpoints, headersCache, events, tokenPrice)
 
 		// add the wallet to the DB
 		insertedWallet, err := db.Wallets().Insert(ctx, "test", accs[3].Address, "")
@@ -142,14 +140,6 @@ func testPayments(t *testing.T, connStr string) {
 
 		require.Equal(t, insertedWallet.Address, claimedWallet.Address)
 		require.Equal(t, claimedWallet.Address, accs[3].Address)
-
-		// run the transfer events cache chore
-		defer ctx.Check(eventsCacheChore.Close)
-		ctx.Go(func() error {
-			return eventsCacheChore.Run(ctx)
-		})
-		eventsCacheChore.Loop.Pause()
-		eventsCacheChore.Loop.TriggerWait()
 
 		payments, err := service.Payments(ctx, accs[3].Address, nil)
 		require.NoError(t, err)
@@ -294,23 +284,14 @@ func testAllPayments(t *testing.T, connStr string) {
 		require.NoError(t, err)
 
 		headersCache := blockchain.NewHeadersCache(logger, db.Headers())
-		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
-			CacheRefreshInterval: 10,
-			AddressBatchSize:     100,
-			BlockBatchSize:       100,
-			ChainReorgBuffer:     15,
-			MaximumQuerySize:     10000,
+		events := events.NewEventsService(logger, db.Wallets(), events.Config{
+			AddressBatchSize: 100,
+			BlockBatchSize:   100,
+			ChainReorgBuffer: 15,
+			MaximumQuerySize: 10000,
 		})
-		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
-		service := tokens.NewService(logger, ethEndpoints, headersCache, eventsCache, tokenPrice)
-		// run the transfer events cache chore
-		defer ctx.Check(eventsCacheChore.Close)
-		ctx.Go(func() error {
-			return eventsCacheChore.Run(ctx)
-		})
-		eventsCacheChore.Loop.Pause()
-		eventsCacheChore.Loop.TriggerWait()
+		service := tokens.NewService(logger, ethEndpoints, headersCache, events, tokenPrice)
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)
 		require.NoError(t, err)

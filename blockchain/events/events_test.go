@@ -189,16 +189,16 @@ func TestGetBlockNumber(t *testing.T) {
 	})
 }
 
-func TestEventsCache(t *testing.T) {
+func TestEventsService(t *testing.T) {
 	t.Run("Postgres", func(t *testing.T) {
-		testEventsCache(t, pgtest.PickPostgres(t))
+		testEventsService(t, pgtest.PickPostgres(t))
 	})
 	t.Run("Cockroach", func(t *testing.T) {
-		testEventsCache(t, pgtest.PickCockroach(t))
+		testEventsService(t, pgtest.PickCockroach(t))
 	})
 }
 
-func testEventsCache(t *testing.T, connStr string) {
+func testEventsService(t *testing.T, connStr string) {
 	testeth.Run(t, 1, 5, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		network := networks[0]
@@ -289,37 +289,20 @@ func testEventsCache(t *testing.T, connStr string) {
 		require.Equal(t, insertedWallet.Address, claimedWallet.Address)
 		require.Equal(t, claimedWallet.Address, accs[4].Address)
 
-		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
-			CacheRefreshInterval: 10,
-			AddressBatchSize:     100,
-			BlockBatchSize:       100,
-			ChainReorgBuffer:     15,
-			MaximumQuerySize:     10000,
+		eventsService := events.NewEventsService(logger, db.Wallets(), events.Config{
+			AddressBatchSize: 100,
+			BlockBatchSize:   100,
+			ChainReorgBuffer: 15,
+			MaximumQuerySize: 10000,
 		})
 
-		eventsList, err := eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), satelliteName, 0)
-		require.NoError(t, err)
-		require.Equal(t, 0, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[3].Address, 0)
-		require.NoError(t, err)
-		require.Equal(t, 0, len(eventsList))
-
-		// run the transfer events cache chore
-		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
-		defer ctx.Check(eventsCacheChore.Close)
-		ctx.Go(func() error {
-			return eventsCacheChore.Run(ctx)
-		})
-		eventsCacheChore.Loop.Pause()
-		eventsCacheChore.Loop.TriggerWait()
-
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), satelliteName, 0)
+		_, eventsList, err := eventsService.GetForSatellite(ctx, ethEndpoints, satelliteName, map[uint64]uint64{network.ChainID().Uint64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 9, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[3].Address, 0)
+		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[3].Address}, map[uint64]uint64{network.ChainID().Uint64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 6, len(eventsList))
-		eventsList, err = eventsCache.GetTransferEvents(ctx, network.ChainID().Uint64(), accs[4].Address, 0)
+		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[4].Address}, map[uint64]uint64{network.ChainID().Uint64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 3, len(eventsList))
 	})

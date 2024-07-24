@@ -59,12 +59,11 @@ func testEndpoint(t *testing.T, connStr string) {
 
 		tokenPriceDB := db.TokenPrice()
 		headersCache := blockchain.NewHeadersCache(logger, db.Headers())
-		eventsCache := events.NewEventsCache(logger, db.Events(), db.Wallets(), events.Config{
-			CacheRefreshInterval: 10,
-			AddressBatchSize:     100,
-			BlockBatchSize:       100,
-			ChainReorgBuffer:     15,
-			MaximumQuerySize:     10000,
+		events := events.NewEventsService(logger, db.Wallets(), events.Config{
+			AddressBatchSize: 100,
+			BlockBatchSize:   100,
+			ChainReorgBuffer: 15,
+			MaximumQuerySize: 10000,
 		})
 		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 
@@ -76,9 +75,8 @@ func testEndpoint(t *testing.T, connStr string) {
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)
 
-		service := tokens.NewService(logger.Named("service"), ethEndpoints, headersCache, eventsCache, tokenPrice)
+		service := tokens.NewService(logger.Named("service"), ethEndpoints, headersCache, events, tokenPrice)
 		paymentEndpoint := tokens.NewEndpoint(logger.Named("endpoint"), service)
-		eventsCacheChore := events.NewChore(logger, eventsCache, ethEndpoints, 10)
 
 		apiServer := api.NewServer(logger, lis, map[string]string{"eu1": "eu1secret", "us1": "us1secret"})
 		apiServer.NewAPI("/example", paymentEndpoint.Register)
@@ -141,14 +139,6 @@ func testEndpoint(t *testing.T, connStr string) {
 			window := startTime.Add(time.Duration(i) * time.Minute)
 			require.NoError(t, tokenPriceDB.Update(ctx, window, price.BaseUnits()))
 		}
-
-		// run the transfer events cache chore
-		defer ctx.Check(eventsCacheChore.Close)
-		ctx.Go(func() error {
-			return eventsCacheChore.Run(ctx)
-		})
-		eventsCacheChore.Loop.Pause()
-		eventsCacheChore.Loop.TriggerWait()
 
 		t.Run("/payments/{address} without authentication", func(t *testing.T) {
 			url := fmt.Sprintf(
