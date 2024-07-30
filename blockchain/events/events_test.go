@@ -129,13 +129,13 @@ func testEventsService(t *testing.T, connStr string) {
 			MaximumQuerySize: 10000,
 		})
 
-		_, eventsList, err := eventsService.GetForSatellite(ctx, ethEndpoints, satelliteName, map[uint64]uint64{network.ChainID().Uint64(): 0})
+		_, eventsList, err := eventsService.GetForSatellite(ctx, ethEndpoints, satelliteName, map[int64]int64{network.ChainID().Int64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 9, len(eventsList))
-		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[3].Address}, map[uint64]uint64{network.ChainID().Uint64(): 0})
+		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[3].Address}, map[int64]int64{network.ChainID().Int64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 6, len(eventsList))
-		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[4].Address}, map[uint64]uint64{network.ChainID().Uint64(): 0})
+		_, eventsList, err = eventsService.GetForAddress(ctx, ethEndpoints, []common.Address{accs[4].Address}, map[int64]int64{network.ChainID().Int64(): 0})
 		require.NoError(t, err)
 		require.Equal(t, 3, len(eventsList))
 	})

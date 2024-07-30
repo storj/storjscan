@@ -34,21 +34,21 @@ func (headers *headersDB) Insert(ctx context.Context, header blockchain.Header) 
 		return ErrHeadersDB.New("invalid chainID 0 specified")
 	}
 	_, err := headers.db.Create_BlockHeader(ctx,
-		dbx.BlockHeader_ChainId(int64(header.ChainID)),
+		dbx.BlockHeader_ChainId(header.ChainID),
 		dbx.BlockHeader_Hash(header.Hash.Bytes()),
-		dbx.BlockHeader_Number(int64(header.Number)),
+		dbx.BlockHeader_Number(header.Number),
 		dbx.BlockHeader_Timestamp(header.Timestamp.UTC()))
 
 	return ErrHeadersDB.Wrap(err)
 }
 
 // Delete deletes block header from the db by block hash.
-func (headers *headersDB) Delete(ctx context.Context, chainID uint64, hash common.Hash) error {
+func (headers *headersDB) Delete(ctx context.Context, chainID int64, hash common.Hash) error {
 	if chainID == 0 {
 		return ErrHeadersDB.New("invalid chainID 0 specified")
 	}
 	deleted, err := headers.db.Delete_BlockHeader_By_ChainId_And_Hash(ctx,
-		dbx.BlockHeader_ChainId(int64(chainID)),
+		dbx.BlockHeader_ChainId(chainID),
 		dbx.BlockHeader_Hash(hash.Bytes()))
 	if err != nil {
 		return ErrHeadersDB.Wrap(err)
@@ -66,12 +66,12 @@ func (headers *headersDB) DeleteBefore(ctx context.Context, before time.Time) (e
 }
 
 // Get retrieves single block header from the db by block hash.
-func (headers *headersDB) Get(ctx context.Context, chainID uint64, hash common.Hash) (blockchain.Header, error) {
+func (headers *headersDB) Get(ctx context.Context, chainID int64, hash common.Hash) (blockchain.Header, error) {
 	if chainID == 0 {
 		return blockchain.Header{}, ErrHeadersDB.New("invalid chainID 0 specified")
 	}
 	dbxHeader, err := headers.db.Get_BlockHeader_By_ChainId_And_Hash(ctx,
-		dbx.BlockHeader_ChainId(int64(chainID)),
+		dbx.BlockHeader_ChainId(chainID),
 		dbx.BlockHeader_Hash(hash.Bytes()))
 	if err != nil {
 		if errs.Is(err, sql.ErrNoRows) {
@@ -85,13 +85,13 @@ func (headers *headersDB) Get(ctx context.Context, chainID uint64, hash common.H
 }
 
 // GetByNumber retrieves single block header from the db by block number.
-func (headers *headersDB) GetByNumber(ctx context.Context, chainID uint64, number uint64) (blockchain.Header, error) {
+func (headers *headersDB) GetByNumber(ctx context.Context, chainID int64, number int64) (blockchain.Header, error) {
 	if chainID == 0 {
 		return blockchain.Header{}, ErrHeadersDB.New("invalid chainID 0 specified")
 	}
 	dbxHeader, err := headers.db.Get_BlockHeader_By_ChainId_And_Number(ctx,
-		dbx.BlockHeader_ChainId(int64(chainID)),
-		dbx.BlockHeader_Number(int64(number)))
+		dbx.BlockHeader_ChainId(chainID),
+		dbx.BlockHeader_Number(number))
 	if err != nil {
 		if errs.Is(err, sql.ErrNoRows) {
 			return blockchain.Header{}, blockchain.ErrNoHeader
@@ -121,9 +121,9 @@ func (headers *headersDB) List(ctx context.Context) ([]blockchain.Header, error)
 // fromDBXHeader converts dbx block header to blockchain.Header type.
 func fromDBXHeader(dbxHeader *dbx.BlockHeader) blockchain.Header {
 	return blockchain.Header{
-		ChainID:   uint64(dbxHeader.ChainId),
+		ChainID:   dbxHeader.ChainId,
 		Hash:      common.HashFromBytes(dbxHeader.Hash),
-		Number:    uint64(dbxHeader.Number),
+		Number:    dbxHeader.Number,
 		Timestamp: dbxHeader.Timestamp.UTC(),
 	}
 }

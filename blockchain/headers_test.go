@@ -105,7 +105,7 @@ func TestHeadersDBList(t *testing.T) {
 			header := blockchain.Header{
 				ChainID:   1337,
 				Hash:      common.HashFromBytes(b),
-				Number:    uint64(i),
+				Number:    i,
 				Timestamp: now.Add(time.Duration(i) * time.Minute),
 			}
 			headers = append(headers, header)
@@ -136,7 +136,7 @@ func TestHeadersCache(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		logger := zaptest.NewLogger(t)
 		now := time.Now().Round(time.Microsecond).UTC()
-		chainID := uint64(1337)
+		chainID := int64(1337)
 		var hash common.Hash
 		b := testrand.BytesInt(32)
 		copy(hash[:], b)
@@ -172,7 +172,7 @@ func testHeadersCacheMissingHeader(t *testing.T, connStr string) {
 	testeth.Run(t, 1, 1, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		logger := zaptest.NewLogger(t)
 		network := networks[0]
-		chainID := network.ChainID().Uint64()
+		chainID := network.ChainID().Int64()
 
 		db, err := storjscandbtest.OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {

@@ -150,7 +150,7 @@ func testPayments(t *testing.T, connStr string) {
 		latestBlockHeader := blockchain.Header{
 			ChainID:   ethEndpoints[0].ChainID,
 			Hash:      currentHead.Hash(),
-			Number:    currentHead.Number.Uint64(),
+			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
 		}
 
@@ -237,7 +237,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			From        accounts.Account
 			To          accounts.Account
 			BlockHash   common.Hash
-			BlockNumber uint64
+			BlockNumber int64
 			Tx          common.Hash
 			LogIndex    int
 		}{
@@ -262,7 +262,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			recpt, err := network.WaitForTx(ctx, tx.Hash())
 			require.NoError(t, err)
 			testPayments[i].BlockHash = recpt.BlockHash
-			testPayments[i].BlockNumber = recpt.BlockNumber.Uint64()
+			testPayments[i].BlockNumber = recpt.BlockNumber.Int64()
 			testPayments[i].Tx = tx.Hash()
 			testPayments[i].LogIndex = 0
 		}
@@ -299,12 +299,12 @@ func testAllPayments(t *testing.T, connStr string) {
 		latestBlockHeader := blockchain.Header{
 			ChainID:   ethEndpoints[0].ChainID,
 			Hash:      currentHead.Hash(),
-			Number:    currentHead.Number.Uint64(),
+			Number:    currentHead.Number.Int64(),
 			Timestamp: time.Unix(int64(currentHead.Time), 0).UTC(),
 		}
 
 		t.Run("eu1 from block 0", func(t *testing.T) {
-			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[uint64]uint64{1337: 1})
+			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[int64]int64{1337: 1})
 			require.NoError(t, err)
 
 			// 4 transactions out of 6
@@ -327,7 +327,7 @@ func testAllPayments(t *testing.T, connStr string) {
 
 		})
 		t.Run("eu1 with specified block", func(t *testing.T) {
-			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[uint64]uint64{1337: testPayments[4].BlockNumber})
+			payments, err := service.AllPayments(api.SetAPIIdentifier(ctx, "eu1"), "eu1", map[int64]int64{1337: testPayments[4].BlockNumber})
 			require.NoError(t, err)
 
 			// 2 transactions out of 6
@@ -369,8 +369,8 @@ func TestChainIds(t *testing.T) {
 		service := tokens.NewService(zaptest.NewLogger(t), ethEndpoints, nil, nil, nil)
 		ids, err := service.GetChainIds(ctx)
 		require.Len(t, ids, 2)
-		require.Equal(t, "Geth1", ids[networks[0].ChainID().Uint64()])
-		require.Equal(t, "Geth2", ids[networks[1].ChainID().Uint64()])
+		require.Equal(t, "Geth1", ids[networks[0].ChainID().Int64()])
+		require.Equal(t, "Geth2", ids[networks[1].ChainID().Int64()])
 		require.NoError(t, err)
 	})
 }
@@ -393,7 +393,7 @@ func txEqual(t *testing.T, s struct {
 	From        accounts.Account
 	To          accounts.Account
 	BlockHash   common.Hash
-	BlockNumber uint64
+	BlockNumber int64
 	Tx          common.Hash
 	LogIndex    int
 }, payment tokens.Payment) {

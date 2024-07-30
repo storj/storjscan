@@ -54,7 +54,7 @@ func NewService(
 }
 
 // Payments retrieves all ERC20 token payments across all configured endpoints starting from a particular block per chain for ethereum address.
-func (service *Service) Payments(ctx context.Context, address common.Address, from map[uint64]uint64) (_ LatestPayments, err error) {
+func (service *Service) Payments(ctx context.Context, address common.Address, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for address", zap.String("wallet", address.Hex()))
 	lastestBlocks, newEvents, err := service.events.GetForAddress(ctx, service.endpoints, []common.Address{address}, from)
@@ -65,7 +65,7 @@ func (service *Service) Payments(ctx context.Context, address common.Address, fr
 }
 
 // AllPayments returns all the payments across all configured endpoints starting from a particular block per chain associated with the current satellite.
-func (service *Service) AllPayments(ctx context.Context, satelliteID string, from map[uint64]uint64) (_ LatestPayments, err error) {
+func (service *Service) AllPayments(ctx context.Context, satelliteID string, from map[int64]int64) (_ LatestPayments, err error) {
 	defer mon.Task()(&ctx)(&err)
 	service.log.Debug("payments request received for satellite", zap.String("satelliteID", satelliteID))
 	lastestBlocks, newEvents, err := service.events.GetForSatellite(ctx, service.endpoints, satelliteID, from)
@@ -75,7 +75,7 @@ func (service *Service) AllPayments(ctx context.Context, satelliteID string, fro
 	return service.toPayments(ctx, lastestBlocks, newEvents)
 }
 
-func (service *Service) toPayments(ctx context.Context, scannedBlocks map[uint64]blockchain.Header, newEvents []events.TransferEvent) (_ LatestPayments, err error) {
+func (service *Service) toPayments(ctx context.Context, scannedBlocks map[int64]blockchain.Header, newEvents []events.TransferEvent) (_ LatestPayments, err error) {
 	var allPayments []Payment
 	var latestBlocks []blockchain.Header
 	for _, endpoint := range service.endpoints {
@@ -113,10 +113,10 @@ func (service *Service) toPaymentsForEndpoint(ctx context.Context, endpoint comm
 
 		payments = append(payments, paymentFromEvent(event, header.Timestamp, price))
 		service.log.Debug("found payment",
-			zap.Uint64("Chain ID", payments[len(payments)-1].ChainID),
+			zap.Int64("Chain ID", payments[len(payments)-1].ChainID),
 			zap.String("Transaction Hash", payments[len(payments)-1].Transaction.String()),
-			zap.Uint64("Block Number", payments[len(payments)-1].BlockNumber),
-			zap.Uint("Log Index", payments[len(payments)-1].LogIndex),
+			zap.Int64("Block Number", payments[len(payments)-1].BlockNumber),
+			zap.Int("Log Index", payments[len(payments)-1].LogIndex),
 			zap.String("USD Value", payments[len(payments)-1].USDValue.AsDecimal().String()),
 		)
 	}
@@ -151,9 +151,9 @@ func ping(ctx context.Context, endpoint common.EthEndpoint) (err error) {
 }
 
 // GetChainIds returns the chain ids of the currently configured endpoints.
-func (service *Service) GetChainIds(ctx context.Context) (chainIds map[uint64]string, err error) {
+func (service *Service) GetChainIds(ctx context.Context) (chainIds map[int64]string, err error) {
 	defer mon.Task()(&ctx)(&err)
-	chainIds = make(map[uint64]string)
+	chainIds = make(map[int64]string)
 	for _, endpoint := range service.endpoints {
 		chainIds[endpoint.ChainID] = endpoint.Name
 	}

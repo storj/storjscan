@@ -21,13 +21,13 @@ import (
 
 // TransferEvent holds a transfer event raised by an ERC20 contract.
 type TransferEvent struct {
-	ChainID     uint64
+	ChainID     int64
 	From        common.Address
 	To          common.Address
 	BlockHash   common.Hash
-	BlockNumber uint64
+	BlockNumber int64
 	TxHash      common.Hash
-	LogIndex    uint
+	LogIndex    int
 	TokenValue  currency.Amount
 }
 
@@ -38,12 +38,12 @@ type Service struct {
 
 	config Config
 	// map satellite and chainID to the last scanned block number
-	lastScannedBlock map[string]map[uint64]uint64
+	lastScannedBlock map[string]map[int64]int64
 }
 
 // NewEventsService creates a new transfer events service.
 func NewEventsService(log *zap.Logger, walletsDB wallets.DB, config Config) *Service {
-	lastScannedBlock := make(map[string]map[uint64]uint64)
+	lastScannedBlock := make(map[string]map[int64]int64)
 	return &Service{
 		log:              log,
 		walletsDB:        walletsDB,
@@ -53,7 +53,7 @@ func NewEventsService(log *zap.Logger, walletsDB wallets.DB, config Config) *Ser
 }
 
 // GetForSatellite returns with the latest transfer events from the blockchain for a given satellite.
-func (events *Service) GetForSatellite(ctx context.Context, endpoints []common.EthEndpoint, satelliteID string, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
+func (events *Service) GetForSatellite(ctx context.Context, endpoints []common.EthEndpoint, satelliteID string, from map[int64]int64) (map[int64]blockchain.Header, []TransferEvent, error) {
 	lastScan := events.lastScannedBlock[satelliteID]
 	for chain, block := range lastScan {
 		if from[chain] < block {
@@ -74,22 +74,22 @@ func (events *Service) GetForSatellite(ctx context.Context, endpoints []common.E
 	}
 
 	for chain, block := range updatedScannedBlocks {
-		if block.Number > events.config.ChainReorgBuffer {
-			events.lastScannedBlock[satelliteID] = map[uint64]uint64{chain: block.Number - events.config.ChainReorgBuffer}
+		if block.Number > int64(events.config.ChainReorgBuffer) {
+			events.lastScannedBlock[satelliteID] = map[int64]int64{chain: block.Number - int64(events.config.ChainReorgBuffer)}
 		} else {
-			events.lastScannedBlock[satelliteID] = map[uint64]uint64{chain: 0}
+			events.lastScannedBlock[satelliteID] = map[int64]int64{chain: 0}
 		}
 	}
 	return updatedScannedBlocks, newEvents, nil
 }
 
 // GetForAddress returns with the latest transfer events from the blockchain for a given address.
-func (events *Service) GetForAddress(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
+func (events *Service) GetForAddress(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[int64]int64) (map[int64]blockchain.Header, []TransferEvent, error) {
 	return events.getEvents(ctx, endpoints, address, from)
 }
 
-func (events *Service) getEvents(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[uint64]uint64) (map[uint64]blockchain.Header, []TransferEvent, error) {
-	scannedBlocks := make(map[uint64]blockchain.Header)
+func (events *Service) getEvents(ctx context.Context, endpoints []common.EthEndpoint, address []common.Address, from map[int64]int64) (map[int64]blockchain.Header, []TransferEvent, error) {
+	scannedBlocks := make(map[int64]blockchain.Header)
 	newEvents := make([]TransferEvent, 0)
 	for _, endpoint := range endpoints {
 		latestChainBlockHeader, err := getChainLatestBlockHeader(ctx, endpoint.URL, endpoint.ChainID)
@@ -98,7 +98,7 @@ func (events *Service) getEvents(ctx context.Context, endpoints []common.EthEndp
 			return nil, nil, err
 		}
 
-		endpointEvents, err := events.getEventsForEndpoint(ctx, endpoint, from[endpoint.ChainID], latestChainBlockHeader.Number, address)
+		endpointEvents, err := events.getEventsForEndpoint(ctx, endpoint, uint64(from[endpoint.ChainID]), uint64(latestChainBlockHeader.Number), address)
 		if err != nil {
 			events.log.Error("failed to refresh events", zap.String("URL", endpoint.URL))
 			return nil, nil, err
@@ -130,14 +130,14 @@ func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common
 	if start > latestChainBlockNumber {
 		return nil, nil
 	}
-	if (latestChainBlockNumber - start) > events.config.MaximumQuerySize {
-		start = latestChainBlockNumber - events.config.MaximumQuerySize
+	if (latestChainBlockNumber - start) > uint64(events.config.MaximumQuerySize) {
+		start = latestChainBlockNumber - uint64(events.config.MaximumQuerySize)
 	}
 	newEvents := make([]TransferEvent, 0)
 	for j := int(start); j < int(latestChainBlockNumber); j += events.config.BlockBatchSize {
 		end := uint64(j + events.config.BlockBatchSize)
 		opts := &bind.FilterOpts{
-			Start:   start,
+			Start:   uint64(j),
 			End:     &end,
 			Context: ctx,
 		}
@@ -162,10 +162,10 @@ func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common
 	return newEvents, nil
 }
 
-func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID uint64) ([]TransferEvent, error) {
+func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID int64) ([]TransferEvent, error) {
 	iter, err := token.FilterTransfer(opts, nil, addresses)
 	if err != nil {
-		events.log.Error("failed to search for transfer events", zap.Uint64("Chain ID", chainID))
+		events.log.Error("failed to search for transfer events", zap.Int64("Chain ID", chainID))
 		return nil, err
 	}
 	defer func() { err = errs.Combine(err, errs.Wrap(iter.Close())) }()
@@ -173,7 +173,7 @@ func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, a
 	newEvents := make([]TransferEvent, 0)
 	for iter.Next() {
 		events.log.Debug("found transfer event",
-			zap.Uint64("Chain ID", chainID),
+			zap.Int64("Chain ID", chainID),
 			zap.String("From", iter.Event.From.String()),
 			zap.String("To", iter.Event.To.String()),
 			zap.String("Transaction Hash", iter.Event.Raw.TxHash.String()),
@@ -186,16 +186,16 @@ func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, a
 			From:        iter.Event.From,
 			To:          iter.Event.To,
 			BlockHash:   iter.Event.Raw.BlockHash,
-			BlockNumber: iter.Event.Raw.BlockNumber,
+			BlockNumber: int64(iter.Event.Raw.BlockNumber),
 			TxHash:      iter.Event.Raw.TxHash,
-			LogIndex:    iter.Event.Raw.Index,
+			LogIndex:    int(iter.Event.Raw.Index),
 			TokenValue:  tokenValue,
 		})
 	}
 	return newEvents, nil
 }
 
-func getChainLatestBlockHeader(ctx context.Context, url string, chainID uint64) (_ blockchain.Header, err error) {
+func getChainLatestBlockHeader(ctx context.Context, url string, chainID int64) (_ blockchain.Header, err error) {
 	client, err := ethclient.DialContext(ctx, url)
 	if err != nil {
 		return blockchain.Header{}, err
@@ -208,7 +208,7 @@ func getChainLatestBlockHeader(ctx context.Context, url string, chainID uint64) 
 	}
 	return blockchain.Header{
 		Hash:      latestBlock.Hash(),
-		Number:    latestBlock.Number.Uint64(),
+		Number:    latestBlock.Number.Int64(),
 		ChainID:   chainID,
 		Timestamp: time.Unix(int64(latestBlock.Time), 0).UTC(),
 	}, nil
