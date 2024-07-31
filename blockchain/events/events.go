@@ -74,10 +74,13 @@ func (events *Service) GetForSatellite(ctx context.Context, endpoints []common.E
 	}
 
 	for chain, block := range updatedScannedBlocks {
+		if events.lastScannedBlock[satelliteID] == nil {
+			events.lastScannedBlock[satelliteID] = make(map[int64]int64)
+		}
 		if block.Number > int64(events.config.ChainReorgBuffer) {
-			events.lastScannedBlock[satelliteID] = map[int64]int64{chain: block.Number - int64(events.config.ChainReorgBuffer)}
+			events.lastScannedBlock[satelliteID][chain] = block.Number - int64(events.config.ChainReorgBuffer)
 		} else {
-			events.lastScannedBlock[satelliteID] = map[int64]int64{chain: 0}
+			events.lastScannedBlock[satelliteID][chain] = 0
 		}
 	}
 	return updatedScannedBlocks, newEvents, nil

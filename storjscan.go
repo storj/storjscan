@@ -34,7 +34,6 @@ var mon = monkit.Package()
 // Config wraps storjscan configuration.
 type Config struct {
 	Debug             debug.Config
-	Blockchain        events.Config
 	Events            events.Config
 	Tokens            tokens.Config
 	TokenPrice        tokenprice.Config
@@ -115,7 +114,7 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		app.Blockchain.HeadersCache = blockchain.NewHeadersCache(log.Named("blockchain:headers-cache"),
 			db.Headers())
 		app.Blockchain.Events = events.NewEventsService(log.Named("blockchain:events-service"),
-			db.Wallets(), config.Blockchain)
+			db.Wallets(), config.Events)
 	}
 
 	{ // token price
