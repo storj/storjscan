@@ -102,6 +102,10 @@ func (service *Service) toPaymentsForEndpoint(ctx context.Context, endpoint comm
 
 	var payments []Payment
 	for _, event := range newEvents {
+		// we only want to consider events for the current endpoint chain ID
+		if event.ChainID != endpoint.ChainID {
+			continue
+		}
 		header, err := service.headersCache.Get(ctx, client, event.ChainID, event.BlockHash)
 		if err != nil {
 			return []Payment{}, ErrService.Wrap(err)
