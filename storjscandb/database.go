@@ -245,6 +245,14 @@ func (db *DB) PostgresMigration() *migrate.Migration {
 					);`,
 				},
 			},
+			{
+				DB:          &db.migrationDB,
+				Description: "Drop transfer event logs cache table",
+				Version:     9,
+				Action: migrate.SQL{
+					`DROP TABLE transfer_events;`,
+				},
+			},
 		},
 	}
 }
