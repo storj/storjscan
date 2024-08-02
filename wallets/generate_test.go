@@ -52,10 +52,10 @@ func TestGenerate(t *testing.T) {
 		client1 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
 
 		var inserts1 []wallets.InsertWallet
-		for address, info := range addresses1 {
+		for _, address := range addresses1 {
 			inserts1 = append(inserts1, wallets.InsertWallet{
-				Address: address,
-				Info:    info,
+				Address: address.Address,
+				Info:    address.Info,
 			})
 		}
 		err = client1.AddWallets(ctx, inserts1)
@@ -66,10 +66,10 @@ func TestGenerate(t *testing.T) {
 		client2 := wallets.NewClient("http://"+lis.Addr().String(), "eu1", "secret")
 
 		var inserts2 []wallets.InsertWallet
-		for address, info := range addresses2 {
+		for _, address := range addresses2 {
 			inserts2 = append(inserts2, wallets.InsertWallet{
-				Address: address,
-				Info:    info,
+				Address: address.Address,
+				Info:    address.Info,
 			})
 		}
 		err = client2.AddWallets(ctx, inserts2)
