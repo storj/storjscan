@@ -14,14 +14,14 @@ import (
 
 func TestRun(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
-		tableCmd := `CREATE TABLE test ( 
-			number bigint NOT NULL, 
+		tableCmd := `CREATE TABLE test (
+			number bigint NOT NULL,
 			PRIMARY KEY (number)
 		)`
-		_, err := db.Exec(ctx, tableCmd)
+		_, err := db.ExecContext(ctx, tableCmd)
 		require.NoError(t, err)
 
-		_, err = db.Exec(ctx, "INSERT INTO test (number) VALUES ($1)", int64(1))
+		_, err = db.ExecContext(ctx, "INSERT INTO test (number) VALUES ($1)", int64(1))
 		require.NoError(t, err)
 
 		row := db.QueryRowContext(ctx, "SELECT number FROM test")

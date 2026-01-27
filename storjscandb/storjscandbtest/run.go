@@ -20,10 +20,10 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
-	"storj.io/private/dbutil"
-	"storj.io/private/dbutil/pgtest"
-	"storj.io/private/dbutil/pgutil"
-	"storj.io/private/dbutil/tempdb"
+	"storj.io/storj/shared/dbutil"
+	"storj.io/storj/shared/dbutil/dbtest"
+	"storj.io/storj/shared/dbutil/pgutil"
+	"storj.io/storj/shared/dbutil/tempdb"
 	"storj.io/storjscan"
 	"storj.io/storjscan/storjscandb"
 	"storj.io/storjscan/wallets"
@@ -38,7 +38,7 @@ func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, db *DB)
 		ctx := testcontext.New(t)
 		defer ctx.Cleanup()
 
-		connStr := pgtest.PickPostgres(t)
+		connStr := dbtest.PickPostgres(t)
 
 		db, err := OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
@@ -58,7 +58,7 @@ func Run(t *testing.T, test func(ctx *testcontext.Context, t *testing.T, db *DB)
 		ctx := testcontext.New(t)
 		defer ctx.Cleanup()
 
-		connStr := pgtest.PickCockroach(t)
+		connStr := dbtest.PickCockroach(t)
 
 		db, err := OpenDB(ctx, zaptest.NewLogger(t), connStr, t.Name(), "T")
 		if err != nil {
@@ -86,7 +86,7 @@ func OpenDB(ctx context.Context, log *zap.Logger, connStr, testName, category st
 	schemaSuffix := pgutil.CreateRandomTestingSchemaName(6)
 	schemaName := schemaName(testName, schemaSuffix, category)
 
-	tempDB, err := tempdb.OpenUnique(ctx, connStr, schemaName)
+	tempDB, err := tempdb.OpenUnique(ctx, log.Named("tempdb"), connStr, schemaName, nil)
 	if err != nil {
 		return nil, err
 	}

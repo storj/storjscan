@@ -10,10 +10,11 @@ import (
 
 	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
+	pgxerrcode "github.com/jackc/pgerrcode"
 
-	"storj.io/private/dbutil/cockroachutil"
-	"storj.io/private/dbutil/txutil"
-	"storj.io/private/tagsql"
+	"storj.io/storj/shared/dbutil/txutil"
+	"storj.io/storj/shared/dbutil/pgutil/pgerrcode"
+	"storj.io/storj/shared/tagsql"
 )
 
 //go:generate sh gen.sh
@@ -34,14 +35,22 @@ func init() {
 	}
 	ShouldRetry = func(driver string, err error) bool {
 		if driver == "pgxcockroach" || driver == "cockroach" {
-			return cockroachutil.NeedsRetry(err)
+			return cockroachNeedsRetry(err)
 		}
 		return false
 	}
 }
 
-// Unwrap returns the underlying error.
-func (e *Error) Unwrap() error { return e.Err }
+func cockroachNeedsRetry(err error) bool {
+	const crdbRetry = "CR000"
+
+	switch pgerrcode.FromError(err) {
+	case crdbRetry, pgxerrcode.SerializationFailure, pgxerrcode.DeadlockDetected, pgxerrcode.AdminShutdown:
+		return true
+	default:
+		return false
+	}
+}
 
 // Cause returns the underlying error.
 func (e *Error) Cause() error { return e.Err }

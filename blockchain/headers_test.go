@@ -16,7 +16,7 @@ import (
 
 	"storj.io/common/testcontext"
 	"storj.io/common/testrand"
-	"storj.io/private/dbutil/pgtest"
+	"storj.io/storj/shared/dbutil/dbtest"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
@@ -161,10 +161,10 @@ func TestHeadersCache(t *testing.T) {
 
 func TestHeadersCacheMissingHeader(t *testing.T) {
 	t.Run("Postgres", func(t *testing.T) {
-		testHeadersCacheMissingHeader(t, pgtest.PickPostgres(t))
+		testHeadersCacheMissingHeader(t, dbtest.PickPostgres(t))
 	})
 	t.Run("Cockroach", func(t *testing.T) {
-		testHeadersCacheMissingHeader(t, pgtest.PickCockroach(t))
+		testHeadersCacheMissingHeader(t, dbtest.PickCockroach(t))
 	})
 }
 

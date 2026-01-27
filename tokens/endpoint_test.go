@@ -18,7 +18,7 @@ import (
 
 	"storj.io/common/currency"
 	"storj.io/common/testcontext"
-	"storj.io/private/dbutil/pgtest"
+	"storj.io/storj/shared/dbutil/dbtest"
 	"storj.io/storjscan/api"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/blockchain/events"
@@ -34,10 +34,10 @@ import (
 
 func TestEndpoint(t *testing.T) {
 	t.Run("Postgres", func(t *testing.T) {
-		testEndpoint(t, pgtest.PickPostgres(t))
+		testEndpoint(t, dbtest.PickPostgres(t))
 	})
 	t.Run("Cockroach", func(t *testing.T) {
-		testEndpoint(t, pgtest.PickCockroach(t))
+		testEndpoint(t, dbtest.PickCockroach(t))
 	})
 }
 

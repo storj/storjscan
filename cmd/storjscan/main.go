@@ -19,8 +19,8 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
-	"storj.io/private/cfgstruct"
-	"storj.io/private/process"
+	"storj.io/common/cfgstruct"
+	"storj.io/common/process"
 	"storj.io/storjscan"
 	"storj.io/storjscan/storjscandb"
 	"storj.io/storjscan/wallets"

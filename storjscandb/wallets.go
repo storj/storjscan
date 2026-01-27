@@ -29,7 +29,7 @@ type walletsDB struct {
 
 // Insert adds a new entry in the wallets table. Info can be an empty string.
 func (wdb *walletsDB) Insert(ctx context.Context, satellite string, address common.Address, info string) (*wallets.Wallet, error) {
-	_, err := wdb.db.Exec(ctx, wdb.db.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
+	_, err := wdb.db.ExecContext(ctx, wdb.db.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"), satellite, address.Bytes(), info)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (wdb *walletsDB) InsertBatch(ctx context.Context, satellite string, entries
 		var err error
 
 		for _, wallet := range entries {
-			_, err := tx.Tx.Exec(ctx, tx.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"),
+			_, err := tx.Tx.ExecContext(ctx, tx.Rebind("INSERT INTO wallets (satellite, address, info) VALUES (?,?,?) ON CONFLICT DO NOTHING"),
 				satellite,
 				wallet.Address.Bytes(),
 				wallet.Info)

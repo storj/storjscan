@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"storj.io/common/testcontext"
-	"storj.io/private/dbutil/pgtest"
+	"storj.io/storj/shared/dbutil/dbtest"
 	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/private/testeth"
@@ -24,10 +24,10 @@ import (
 
 func TestEventsService(t *testing.T) {
 	t.Run("Postgres", func(t *testing.T) {
-		testEventsService(t, pgtest.PickPostgres(t))
+		testEventsService(t, dbtest.PickPostgres(t))
 	})
 	t.Run("Cockroach", func(t *testing.T) {
-		testEventsService(t, pgtest.PickCockroach(t))
+		testEventsService(t, dbtest.PickCockroach(t))
 	})
 }
 

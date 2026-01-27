@@ -11,10 +11,10 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
-	"storj.io/private/dbutil"
-	"storj.io/private/dbutil/pgutil"
-	"storj.io/private/migrate"
-	"storj.io/private/tagsql"
+	"storj.io/storj/shared/dbutil"
+	"storj.io/storj/shared/dbutil/pgutil"
+	"storj.io/storj/private/migrate"
+	"storj.io/storj/shared/tagsql"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/storjscandb/dbx"
 	"storj.io/storjscan/tokenprice"
@@ -48,7 +48,7 @@ func Open(ctx context.Context, log *zap.Logger, databaseURL string) (*DB, error)
 		return nil, Error.New("unsupported driver %q", driver)
 	}
 
-	source, err = pgutil.CheckApplicationName(source, "storjscan")
+	source, err = pgutil.EnsureApplicationName(source, "storjscan")
 	if err != nil {
 		return nil, err
 	}
@@ -91,11 +91,11 @@ func (db *DB) MigrateToLatest(ctx context.Context) error {
 
 	case dbutil.Cockroach:
 		var dbName string
-		if err := db.QueryRow(ctx, `SELECT current_database();`).Scan(&dbName); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT current_database();`).Scan(&dbName); err != nil {
 			return errs.New("error querying current database: %+v", err)
 		}
 
-		_, err := db.Exec(ctx, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`,
+		_, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`,
 			pgutil.QuoteIdentifier(dbName)))
 		if err != nil {
 			return errs.Wrap(err)
@@ -129,7 +129,7 @@ func (db *DB) Wallets() wallets.DB {
 
 // Ping checks if the database connection is available.
 func (db *DB) Ping(ctx context.Context) error {
-	return db.DB.Ping(ctx)
+	return db.DB.PingContext(ctx)
 }
 
 // PostgresMigration returns steps needed for migrating postgres database.

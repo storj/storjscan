@@ -20,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"storj.io/private/tagsql"
+	"storj.io/storj/shared/tagsql"
 )
 
 // Prevent conditional imports from causing build failures.
@@ -31,7 +31,7 @@ var _ sync.Mutex
 
 var (
 	WrapErr     = func(err *Error) error { return err }
-	Logger      func(format string, args ...interface{})
+	Logger      func(format string, args ...any)
 	ShouldRetry func(driver string, err error) bool
 
 	errTooManyRows       = errors.New("too many rows")
@@ -39,7 +39,7 @@ var (
 	errEmptyUpdate       = errors.New("empty update")
 )
 
-func logError(format string, args ...interface{}) {
+func logError(format string, args ...any) {
 	if Logger != nil {
 		Logger(format, args...)
 	}
@@ -69,6 +69,10 @@ func (e *Error) Error() string {
 	return e.Err.Error()
 }
 
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
 func wrapErr(e *Error) error {
 	if WrapErr == nil {
 		return e
@@ -80,11 +84,15 @@ func makeErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	e := &Error{Err: err}
-	switch err {
-	case sql.ErrNoRows:
+	var e *Error
+	if errors.As(err, &e) {
+		return wrapErr(e)
+	}
+	e = &Error{Err: err}
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		e.Code = ErrorCode_NoRows
-	case sql.ErrTxDone:
+	case errors.Is(err, sql.ErrTxDone):
 		e.Code = ErrorCode_TxDone
 	}
 	return wrapErr(e)
@@ -128,16 +136,27 @@ func constraintViolation(err error, constraint string) error {
 	})
 }
 
-type driver interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...interface{}) (tagsql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+func closeRows(rows tagsql.Rows, err *error) {
+	rowsErr := rows.Err()
+	closeErr := rows.Close()
+	if *err != nil {
+		// throw away errors from .Err() and .Close(), if any; they are almost certainly less important
+		// than the error we already have
+		return
+	}
+	if rowsErr != nil {
+		// throw away error from .Close(), if any; it is probably less important
+		*err = rowsErr
+		return
+	}
+	*err = closeErr
 }
 
-var (
-	notAPointer     = errors.New("destination not a pointer")
-	lossyConversion = errors.New("lossy conversion")
-)
+type driver interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (tagsql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
 
 type DB struct {
 	tagsql.DB
@@ -165,7 +184,7 @@ func Open(driver, source string) (db *DB, err error) {
 	}
 	defer func(sql_db *sql.DB) {
 		if err != nil {
-			sql_db.Close()
+			_ = sql_db.Close()
 		}
 	}(sql_db)
 
@@ -207,6 +226,7 @@ func (obj *DB) Open(ctx context.Context) (*Tx, error) {
 		txMethods: obj.wrapTx(tx),
 	}, nil
 }
+
 func DeleteAll(ctx context.Context, db *DB) (int64, error) {
 	tx, err := db.Open(ctx)
 	if err != nil {
@@ -228,6 +248,16 @@ func DeleteAll(ctx context.Context, db *DB) (int64, error) {
 type Tx struct {
 	Tx tagsql.Tx
 	txMethods
+}
+
+func (tx *Tx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return tx.Tx.ExecContext(ctx, query, args...)
+}
+func (tx *Tx) QueryContext(ctx context.Context, query string, args ...any) (tagsql.Rows, error) {
+	return tx.Tx.QueryContext(ctx, query, args...)
+}
+func (tx *Tx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return tx.Tx.QueryRowContext(ctx, query, args...)
 }
 
 type dialectTx struct {
@@ -253,7 +283,7 @@ func (obj *pgxImpl) Rebind(s string) string {
 	return obj.dialect.Rebind(s)
 }
 
-func (obj *pgxImpl) logStmt(stmt string, args ...interface{}) {
+func (obj *pgxImpl) logStmt(stmt string, args ...any) {
 	pgxLogStmt(stmt, args...)
 }
 
@@ -273,10 +303,10 @@ type pgxImpl_retryingRow struct {
 	obj   *pgxImpl
 	ctx   context.Context
 	query string
-	args  []interface{}
+	args  []any
 }
 
-func (obj *pgxImpl) queryRowContext(ctx context.Context, query string, args ...interface{}) *pgxImpl_retryingRow {
+func (obj *pgxImpl) queryRowContext(ctx context.Context, query string, args ...any) *pgxImpl_retryingRow {
 	return &pgxImpl_retryingRow{
 		obj:   obj,
 		ctx:   ctx,
@@ -285,7 +315,7 @@ func (obj *pgxImpl) queryRowContext(ctx context.Context, query string, args ...i
 	}
 }
 
-func (rows *pgxImpl_retryingRow) Scan(dest ...interface{}) error {
+func (rows *pgxImpl_retryingRow) Scan(dest ...any) error {
 	for {
 		err := rows.obj.driver.QueryRowContext(rows.ctx, rows.query, rows.args...).Scan(dest...)
 		if err != nil {
@@ -314,21 +344,25 @@ func newpgx(db *DB) *pgxDB {
 	}
 }
 
-func (obj *pgxDB) Schema() string {
-	return `CREATE TABLE block_headers (
+func (obj *pgxDB) Schema() []string {
+	return []string{
+
+		`CREATE TABLE block_headers (
 	chain_id bigint NOT NULL,
 	hash bytea NOT NULL,
 	number bigint NOT NULL,
 	timestamp timestamp with time zone NOT NULL,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( chain_id, hash )
-);
-CREATE TABLE token_prices (
+)`,
+
+		`CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
 	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
-);
-CREATE TABLE wallets (
+)`,
+
+		`CREATE TABLE wallets (
 	id bigserial NOT NULL,
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
@@ -336,9 +370,23 @@ CREATE TABLE wallets (
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( id )
-);
-CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
-CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;`
+)`,
+
+		`CREATE INDEX wallets_satellite_index ON wallets ( satellite )`,
+
+		`CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address )`,
+	}
+}
+
+func (obj *pgxDB) DropSchema() []string {
+	return []string{
+
+		`DROP TABLE IF EXISTS wallets`,
+
+		`DROP TABLE IF EXISTS token_prices`,
+
+		`DROP TABLE IF EXISTS block_headers`,
+	}
 }
 
 func (obj *pgxDB) wrapTx(tx tagsql.Tx) txMethods {
@@ -357,7 +405,7 @@ type pgxTx struct {
 	*pgxImpl
 }
 
-func pgxLogStmt(stmt string, args ...interface{}) {
+func pgxLogStmt(stmt string, args ...any) {
 	// TODO: render placeholders
 	if Logger != nil {
 		out := fmt.Sprintf("stmt: %s\nargs: %v\n", stmt, pretty(args))
@@ -376,7 +424,7 @@ func (obj *pgxcockroachImpl) Rebind(s string) string {
 	return obj.dialect.Rebind(s)
 }
 
-func (obj *pgxcockroachImpl) logStmt(stmt string, args ...interface{}) {
+func (obj *pgxcockroachImpl) logStmt(stmt string, args ...any) {
 	pgxcockroachLogStmt(stmt, args...)
 }
 
@@ -396,10 +444,10 @@ type pgxcockroachImpl_retryingRow struct {
 	obj   *pgxcockroachImpl
 	ctx   context.Context
 	query string
-	args  []interface{}
+	args  []any
 }
 
-func (obj *pgxcockroachImpl) queryRowContext(ctx context.Context, query string, args ...interface{}) *pgxcockroachImpl_retryingRow {
+func (obj *pgxcockroachImpl) queryRowContext(ctx context.Context, query string, args ...any) *pgxcockroachImpl_retryingRow {
 	return &pgxcockroachImpl_retryingRow{
 		obj:   obj,
 		ctx:   ctx,
@@ -408,7 +456,7 @@ func (obj *pgxcockroachImpl) queryRowContext(ctx context.Context, query string, 
 	}
 }
 
-func (rows *pgxcockroachImpl_retryingRow) Scan(dest ...interface{}) error {
+func (rows *pgxcockroachImpl_retryingRow) Scan(dest ...any) error {
 	for {
 		err := rows.obj.driver.QueryRowContext(rows.ctx, rows.query, rows.args...).Scan(dest...)
 		if err != nil {
@@ -437,21 +485,25 @@ func newpgxcockroach(db *DB) *pgxcockroachDB {
 	}
 }
 
-func (obj *pgxcockroachDB) Schema() string {
-	return `CREATE TABLE block_headers (
+func (obj *pgxcockroachDB) Schema() []string {
+	return []string{
+
+		`CREATE TABLE block_headers (
 	chain_id bigint NOT NULL,
 	hash bytea NOT NULL,
 	number bigint NOT NULL,
 	timestamp timestamp with time zone NOT NULL,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( chain_id, hash )
-);
-CREATE TABLE token_prices (
+)`,
+
+		`CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
 	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
-);
-CREATE TABLE wallets (
+)`,
+
+		`CREATE TABLE wallets (
 	id bigserial NOT NULL,
 	address bytea NOT NULL,
 	claimed timestamp with time zone,
@@ -459,9 +511,23 @@ CREATE TABLE wallets (
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( id )
-);
-CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
-CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;`
+)`,
+
+		`CREATE INDEX wallets_satellite_index ON wallets ( satellite )`,
+
+		`CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address )`,
+	}
+}
+
+func (obj *pgxcockroachDB) DropSchema() []string {
+	return []string{
+
+		`DROP TABLE IF EXISTS wallets`,
+
+		`DROP TABLE IF EXISTS token_prices`,
+
+		`DROP TABLE IF EXISTS block_headers`,
+	}
 }
 
 func (obj *pgxcockroachDB) wrapTx(tx tagsql.Tx) txMethods {
@@ -480,7 +546,7 @@ type pgxcockroachTx struct {
 	*pgxcockroachImpl
 }
 
-func pgxcockroachLogStmt(stmt string, args ...interface{}) {
+func pgxcockroachLogStmt(stmt string, args ...any) {
 	// TODO: render placeholders
 	if Logger != nil {
 		out := fmt.Sprintf("stmt: %s\nargs: %v\n", stmt, pretty(args))
@@ -488,41 +554,41 @@ func pgxcockroachLogStmt(stmt string, args ...interface{}) {
 	}
 }
 
-type pretty []interface{}
+type pretty []any
 
 func (p pretty) Format(f fmt.State, c rune) {
-	fmt.Fprint(f, "[")
+	_, _ = fmt.Fprint(f, "[")
 nextval:
 	for i, val := range p {
 		if i > 0 {
-			fmt.Fprint(f, ", ")
+			_, _ = fmt.Fprint(f, ", ")
 		}
 		rv := reflect.ValueOf(val)
 		if rv.Kind() == reflect.Ptr {
 			if rv.IsNil() {
-				fmt.Fprint(f, "NULL")
+				_, _ = fmt.Fprint(f, "NULL")
 				continue
 			}
 			val = rv.Elem().Interface()
 		}
 		switch v := val.(type) {
 		case string:
-			fmt.Fprintf(f, "%q", v)
+			_, _ = fmt.Fprintf(f, "%q", v)
 		case time.Time:
-			fmt.Fprintf(f, "%s", v.Format(time.RFC3339Nano))
+			_, _ = fmt.Fprintf(f, "%s", v.Format(time.RFC3339Nano))
 		case []byte:
 			for _, b := range v {
 				if !unicode.IsPrint(rune(b)) {
-					fmt.Fprintf(f, "%#x", v)
+					_, _ = fmt.Fprintf(f, "%#x", v)
 					continue nextval
 				}
 			}
-			fmt.Fprintf(f, "%q", v)
+			_, _ = fmt.Fprintf(f, "%q", v)
 		default:
-			fmt.Fprintf(f, "%v", v)
+			_, _ = fmt.Fprintf(f, "%v", v)
 		}
 	}
-	fmt.Fprint(f, "]")
+	_, _ = fmt.Fprint(f, "]")
 }
 
 type BlockHeader struct {
@@ -548,14 +614,12 @@ func BlockHeader_ChainId(v int64) BlockHeader_ChainId_Field {
 	return BlockHeader_ChainId_Field{_set: true, _value: v}
 }
 
-func (f BlockHeader_ChainId_Field) value() interface{} {
+func (f BlockHeader_ChainId_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (BlockHeader_ChainId_Field) _Column() string { return "chain_id" }
 
 type BlockHeader_Hash_Field struct {
 	_set   bool
@@ -567,14 +631,12 @@ func BlockHeader_Hash(v []byte) BlockHeader_Hash_Field {
 	return BlockHeader_Hash_Field{_set: true, _value: v}
 }
 
-func (f BlockHeader_Hash_Field) value() interface{} {
+func (f BlockHeader_Hash_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (BlockHeader_Hash_Field) _Column() string { return "hash" }
 
 type BlockHeader_Number_Field struct {
 	_set   bool
@@ -586,14 +648,12 @@ func BlockHeader_Number(v int64) BlockHeader_Number_Field {
 	return BlockHeader_Number_Field{_set: true, _value: v}
 }
 
-func (f BlockHeader_Number_Field) value() interface{} {
+func (f BlockHeader_Number_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (BlockHeader_Number_Field) _Column() string { return "number" }
 
 type BlockHeader_Timestamp_Field struct {
 	_set   bool
@@ -605,14 +665,12 @@ func BlockHeader_Timestamp(v time.Time) BlockHeader_Timestamp_Field {
 	return BlockHeader_Timestamp_Field{_set: true, _value: v}
 }
 
-func (f BlockHeader_Timestamp_Field) value() interface{} {
+func (f BlockHeader_Timestamp_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (BlockHeader_Timestamp_Field) _Column() string { return "timestamp" }
 
 type BlockHeader_CreatedAt_Field struct {
 	_set   bool
@@ -624,14 +682,12 @@ func BlockHeader_CreatedAt(v time.Time) BlockHeader_CreatedAt_Field {
 	return BlockHeader_CreatedAt_Field{_set: true, _value: v}
 }
 
-func (f BlockHeader_CreatedAt_Field) value() interface{} {
+func (f BlockHeader_CreatedAt_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (BlockHeader_CreatedAt_Field) _Column() string { return "created_at" }
 
 type TokenPrice struct {
 	IntervalStart time.Time
@@ -654,14 +710,12 @@ func TokenPrice_IntervalStart(v time.Time) TokenPrice_IntervalStart_Field {
 	return TokenPrice_IntervalStart_Field{_set: true, _value: v}
 }
 
-func (f TokenPrice_IntervalStart_Field) value() interface{} {
+func (f TokenPrice_IntervalStart_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (TokenPrice_IntervalStart_Field) _Column() string { return "interval_start" }
 
 type TokenPrice_Price_Field struct {
 	_set   bool
@@ -673,14 +727,12 @@ func TokenPrice_Price(v int64) TokenPrice_Price_Field {
 	return TokenPrice_Price_Field{_set: true, _value: v}
 }
 
-func (f TokenPrice_Price_Field) value() interface{} {
+func (f TokenPrice_Price_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (TokenPrice_Price_Field) _Column() string { return "price" }
 
 type Wallet struct {
 	Id        int64
@@ -713,14 +765,12 @@ func Wallet_Id(v int64) Wallet_Id_Field {
 	return Wallet_Id_Field{_set: true, _value: v}
 }
 
-func (f Wallet_Id_Field) value() interface{} {
+func (f Wallet_Id_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_Id_Field) _Column() string { return "id" }
 
 type Wallet_Address_Field struct {
 	_set   bool
@@ -732,14 +782,12 @@ func Wallet_Address(v []byte) Wallet_Address_Field {
 	return Wallet_Address_Field{_set: true, _value: v}
 }
 
-func (f Wallet_Address_Field) value() interface{} {
+func (f Wallet_Address_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_Address_Field) _Column() string { return "address" }
 
 type Wallet_Claimed_Field struct {
 	_set   bool
@@ -764,14 +812,12 @@ func Wallet_Claimed_Null() Wallet_Claimed_Field {
 
 func (f Wallet_Claimed_Field) isnull() bool { return !f._set || f._null || f._value == nil }
 
-func (f Wallet_Claimed_Field) value() interface{} {
+func (f Wallet_Claimed_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_Claimed_Field) _Column() string { return "claimed" }
 
 type Wallet_Satellite_Field struct {
 	_set   bool
@@ -783,14 +829,12 @@ func Wallet_Satellite(v string) Wallet_Satellite_Field {
 	return Wallet_Satellite_Field{_set: true, _value: v}
 }
 
-func (f Wallet_Satellite_Field) value() interface{} {
+func (f Wallet_Satellite_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_Satellite_Field) _Column() string { return "satellite" }
 
 type Wallet_Info_Field struct {
 	_set   bool
@@ -815,14 +859,12 @@ func Wallet_Info_Null() Wallet_Info_Field {
 
 func (f Wallet_Info_Field) isnull() bool { return !f._set || f._null || f._value == nil }
 
-func (f Wallet_Info_Field) value() interface{} {
+func (f Wallet_Info_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_Info_Field) _Column() string { return "info" }
 
 type Wallet_CreatedAt_Field struct {
 	_set   bool
@@ -834,14 +876,12 @@ func Wallet_CreatedAt(v time.Time) Wallet_CreatedAt_Field {
 	return Wallet_CreatedAt_Field{_set: true, _value: v}
 }
 
-func (f Wallet_CreatedAt_Field) value() interface{} {
+func (f Wallet_CreatedAt_Field) value() any {
 	if !f._set || f._null {
 		return nil
 	}
 	return f._value
 }
-
-func (Wallet_CreatedAt_Field) _Column() string { return "created_at" }
 
 func toUTC(t time.Time) time.Time {
 	return t.UTC()
@@ -874,6 +914,14 @@ const (
 	__sqlbundle_NoFlatten __sqlbundle_RenderOp = iota
 	__sqlbundle_NoTerminate
 )
+
+func __sqlbundle_RenderAll(dialect __sqlbundle_Dialect, sqls []__sqlbundle_SQL, ops ...__sqlbundle_RenderOp) []string {
+	var rs []string
+	for _, sql := range sqls {
+		rs = append(rs, __sqlbundle_Render(dialect, sql, ops...))
+	}
+	return rs
+}
 
 func __sqlbundle_Render(dialect __sqlbundle_Dialect, sql __sqlbundle_SQL, ops ...__sqlbundle_RenderOp) string {
 	out := sql.Render()
@@ -1031,6 +1079,14 @@ func (p __sqlbundle_postgres) Rebind(sql string) string {
 
 // this type is specially named to match up with the name returned by the
 // dialect impl in the sql package.
+type __sqlbundle_spanner struct{}
+
+func (p __sqlbundle_spanner) Rebind(sql string) string {
+	return sql
+}
+
+// this type is specially named to match up with the name returned by the
+// dialect impl in the sql package.
 type __sqlbundle_sqlite3 struct{}
 
 func (s __sqlbundle_sqlite3) Rebind(sql string) string {
@@ -1126,7 +1182,6 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 	block_header_number BlockHeader_Number_Field,
 	block_header_timestamp BlockHeader_Timestamp_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 	__chain_id_val := block_header_chain_id.value()
 	__hash_val := block_header_hash.value()
 	__number_val := block_header_number.value()
@@ -1138,7 +1193,7 @@ func (obj *pgxImpl) Create_BlockHeader(ctx context.Context,
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO block_headers "), __clause, __sqlbundle_Literal(" RETURNING block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at")}}
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __chain_id_val, __hash_val, __number_val, __timestamp_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1157,13 +1212,12 @@ func (obj *pgxImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
 	token_price_price TokenPrice_Price_Field) (
 	err error) {
-	defer mon.Task()(&ctx)(&err)
 	__interval_start_val := token_price_interval_start.value()
 	__price_val := token_price_price.value()
 
 	var __embed_stmt = __sqlbundle_Literal("INSERT INTO token_prices ( interval_start, price ) VALUES ( ?, ? ) ON CONFLICT ( interval_start ) DO UPDATE SET interval_start = EXCLUDED.interval_start, price = EXCLUDED.price")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __interval_start_val, __price_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1182,7 +1236,6 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
 	__satellite_val := wallet_satellite.value()
@@ -1194,7 +1247,7 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __address_val, __claimed_val, __satellite_val, __info_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1211,11 +1264,10 @@ func (obj *pgxImpl) Create_Wallet(ctx context.Context,
 
 func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	rows []*BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers ORDER BY block_headers.timestamp DESC")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1226,7 +1278,7 @@ func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) 
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				block_header := &BlockHeader{}
@@ -1235,9 +1287,6 @@ func (obj *pgxImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) 
 					return nil, err
 				}
 				rows = append(rows, block_header)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -1256,11 +1305,10 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Hash(ctx context.Context,
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_hash BlockHeader_Hash_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.hash = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_hash.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1279,11 +1327,10 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.Context,
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_number BlockHeader_Number_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.number = ? LIMIT 2")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_number.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1295,12 +1342,9 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.Context,
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, sql.ErrNoRows
 			}
 
@@ -1314,17 +1358,13 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.Context,
 				return nil, errTooManyRows
 			}
 
-			if err := __rows.Err(); err != nil {
-				return nil, err
-			}
-
 			return block_header, nil
 		}()
 		if err != nil {
 			if obj.shouldRetry(err) {
 				continue
 			}
-			if err == errTooManyRows {
+			if errors.Is(err, errTooManyRows) {
 				return nil, tooManyRows("BlockHeader_By_ChainId_And_Number")
 			}
 			return nil, obj.makeErr(err)
@@ -1337,11 +1377,10 @@ func (obj *pgxImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.Context,
 func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1359,11 +1398,10 @@ func (obj *pgxImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start < ? ORDER BY token_prices.interval_start DESC LIMIT 1 OFFSET 0")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1375,12 +1413,9 @@ func (obj *pgxImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_Interval
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, nil
 			}
 
@@ -1407,11 +1442,10 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 	wallet_address Wallet_Address_Field,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ? LIMIT 2")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_address.value(), wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1423,12 +1457,9 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, sql.ErrNoRows
 			}
 
@@ -1442,17 +1473,13 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 				return nil, errTooManyRows
 			}
 
-			if err := __rows.Err(); err != nil {
-				return nil, err
-			}
-
 			return wallet, nil
 		}()
 		if err != nil {
 			if obj.shouldRetry(err) {
 				continue
 			}
-			if err == errTooManyRows {
+			if errors.Is(err, errTooManyRows) {
 				return nil, tooManyRows("Wallet_By_Address_And_Satellite")
 			}
 			return nil, obj.makeErr(err)
@@ -1465,11 +1492,10 @@ func (obj *pgxImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Context,
 func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1481,12 +1507,9 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Co
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, nil
 			}
 
@@ -1511,11 +1534,10 @@ func (obj *pgxImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Co
 
 func (obj *pgxImpl) Count_Wallet_Address(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1531,11 +1553,10 @@ func (obj *pgxImpl) Count_Wallet_Address(ctx context.Context) (
 
 func (obj *pgxImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1551,11 +1572,10 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 
 func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1571,11 +1591,10 @@ func (obj *pgxImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 
 func (obj *pgxImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1586,7 +1605,7 @@ func (obj *pgxImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				wallet := &Wallet{}
@@ -1595,9 +1614,6 @@ func (obj *pgxImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 					return nil, err
 				}
 				rows = append(rows, wallet)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -1615,11 +1631,10 @@ func (obj *pgxImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1631,7 +1646,7 @@ func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.C
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				wallet := &Wallet{}
@@ -1640,9 +1655,6 @@ func (obj *pgxImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.C
 					return nil, err
 				}
 				rows = append(rows, wallet)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -1661,14 +1673,14 @@ func (obj *pgxImpl) Update_Wallet_By_Id(ctx context.Context,
 	wallet_id Wallet_Id_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+
 	var __sets = &__sqlbundle_Hole{}
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.id = ? RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
-	var __values []interface{}
-	var __args []interface{}
+	var __values []any
+	var __args []any
 
 	if update.Claimed._set {
 		__values = append(__values, update.Claimed.value())
@@ -1693,8 +1705,8 @@ func (obj *pgxImpl) Update_Wallet_By_Id(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
-	if err == sql.ErrNoRows {
+	err = obj.driver.QueryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -1707,11 +1719,10 @@ func (obj *pgxImpl) Delete_BlockHeader_By_ChainId_And_Hash(ctx context.Context,
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.hash = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_hash.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1734,11 +1745,10 @@ func (obj *pgxImpl) Delete_BlockHeader_By_ChainId_And_Hash(ctx context.Context,
 func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 	block_header_timestamp_less BlockHeader_Timestamp_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_timestamp_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1761,11 +1771,10 @@ func (obj *pgxImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1785,8 +1794,7 @@ func (obj *pgxImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 
 }
 
-func (impl pgxImpl) isConstraintError(err error) (
-	constraint string, ok bool) {
+func (impl pgxImpl) isConstraintError(err error) (constraint string, ok bool) {
 	if e, ok := err.(*pgconn.PgError); ok {
 		if e.Code[:2] == "23" {
 			return e.ConstraintName, true
@@ -1796,7 +1804,6 @@ func (impl pgxImpl) isConstraintError(err error) (
 }
 
 func (obj *pgxImpl) deleteAll(ctx context.Context) (count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 	var __res sql.Result
 	var __count int64
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM wallets;")
@@ -1840,7 +1847,6 @@ func (obj *pgxcockroachImpl) Create_BlockHeader(ctx context.Context,
 	block_header_number BlockHeader_Number_Field,
 	block_header_timestamp BlockHeader_Timestamp_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 	__chain_id_val := block_header_chain_id.value()
 	__hash_val := block_header_hash.value()
 	__number_val := block_header_number.value()
@@ -1852,7 +1858,7 @@ func (obj *pgxcockroachImpl) Create_BlockHeader(ctx context.Context,
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO block_headers "), __clause, __sqlbundle_Literal(" RETURNING block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at")}}
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __chain_id_val, __hash_val, __number_val, __timestamp_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1871,13 +1877,12 @@ func (obj *pgxcockroachImpl) ReplaceNoReturn_TokenPrice(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field,
 	token_price_price TokenPrice_Price_Field) (
 	err error) {
-	defer mon.Task()(&ctx)(&err)
 	__interval_start_val := token_price_interval_start.value()
 	__price_val := token_price_price.value()
 
 	var __embed_stmt = __sqlbundle_Literal("UPSERT INTO token_prices ( interval_start, price ) VALUES ( ?, ? )")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __interval_start_val, __price_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1896,7 +1901,6 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field,
 	optional Wallet_Create_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 	__address_val := wallet_address.value()
 	__claimed_val := optional.Claimed.value()
 	__satellite_val := wallet_satellite.value()
@@ -1908,7 +1912,7 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("INSERT INTO wallets "), __clause, __sqlbundle_Literal(" RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, __address_val, __claimed_val, __satellite_val, __info_val)
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1925,11 +1929,10 @@ func (obj *pgxcockroachImpl) Create_Wallet(ctx context.Context,
 
 func (obj *pgxcockroachImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.Context) (
 	rows []*BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers ORDER BY block_headers.timestamp DESC")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -1940,7 +1943,7 @@ func (obj *pgxcockroachImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				block_header := &BlockHeader{}
@@ -1949,9 +1952,6 @@ func (obj *pgxcockroachImpl) All_BlockHeader_OrderBy_Desc_Timestamp(ctx context.
 					return nil, err
 				}
 				rows = append(rows, block_header)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -1970,11 +1970,10 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Hash(ctx context.Con
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_hash BlockHeader_Hash_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.hash = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_hash.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -1993,11 +1992,10 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.C
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_number BlockHeader_Number_Field) (
 	block_header *BlockHeader, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT block_headers.chain_id, block_headers.hash, block_headers.number, block_headers.timestamp, block_headers.created_at FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.number = ? LIMIT 2")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_number.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2009,12 +2007,9 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.C
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, sql.ErrNoRows
 			}
 
@@ -2028,17 +2023,13 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.C
 				return nil, errTooManyRows
 			}
 
-			if err := __rows.Err(); err != nil {
-				return nil, err
-			}
-
 			return block_header, nil
 		}()
 		if err != nil {
 			if obj.shouldRetry(err) {
 				continue
 			}
-			if err == errTooManyRows {
+			if errors.Is(err, errTooManyRows) {
 				return nil, tooManyRows("BlockHeader_By_ChainId_And_Number")
 			}
 			return nil, obj.makeErr(err)
@@ -2051,11 +2042,10 @@ func (obj *pgxcockroachImpl) Get_BlockHeader_By_ChainId_And_Number(ctx context.C
 func (obj *pgxcockroachImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context,
 	token_price_interval_start TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2073,11 +2063,10 @@ func (obj *pgxcockroachImpl) Get_TokenPrice_By_IntervalStart(ctx context.Context
 func (obj *pgxcockroachImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc_IntervalStart(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	token_price *TokenPrice, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT token_prices.interval_start, token_prices.price FROM token_prices WHERE token_prices.interval_start < ? ORDER BY token_prices.interval_start DESC LIMIT 1 OFFSET 0")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2089,12 +2078,9 @@ func (obj *pgxcockroachImpl) First_TokenPrice_By_IntervalStart_Less_OrderBy_Desc
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, nil
 			}
 
@@ -2121,11 +2107,10 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 	wallet_address Wallet_Address_Field,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.address = ? AND wallets.satellite = ? LIMIT 2")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_address.value(), wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2137,12 +2122,9 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, sql.ErrNoRows
 			}
 
@@ -2156,17 +2138,13 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 				return nil, errTooManyRows
 			}
 
-			if err := __rows.Err(); err != nil {
-				return nil, err
-			}
-
 			return wallet, nil
 		}()
 		if err != nil {
 			if obj.shouldRetry(err) {
 				continue
 			}
-			if err == errTooManyRows {
+			if errors.Is(err, errTooManyRows) {
 				return nil, tooManyRows("Wallet_By_Address_And_Satellite")
 			}
 			return nil, obj.makeErr(err)
@@ -2179,11 +2157,10 @@ func (obj *pgxcockroachImpl) Get_Wallet_By_Address_And_Satellite(ctx context.Con
 func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is NULL AND wallets.satellite = ? LIMIT 1 OFFSET 0")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2195,12 +2172,9 @@ func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx c
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			if !__rows.Next() {
-				if err := __rows.Err(); err != nil {
-					return nil, err
-				}
 				return nil, nil
 			}
 
@@ -2225,11 +2199,10 @@ func (obj *pgxcockroachImpl) First_Wallet_By_Claimed_Is_Null_And_Satellite(ctx c
 
 func (obj *pgxcockroachImpl) Count_Wallet_Address(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -2245,11 +2218,10 @@ func (obj *pgxcockroachImpl) Count_Wallet_Address(ctx context.Context) (
 
 func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -2265,11 +2237,10 @@ func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_IsNot_Null(ctx context.Cont
 
 func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT COUNT(*) FROM wallets WHERE wallets.claimed is NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -2285,11 +2256,10 @@ func (obj *pgxcockroachImpl) Count_Wallet_By_Claimed_Is_Null(ctx context.Context
 
 func (obj *pgxcockroachImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Context) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
 	obj.logStmt(__stmt, __values...)
@@ -2300,7 +2270,7 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Contex
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				wallet := &Wallet{}
@@ -2309,9 +2279,6 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Contex
 					return nil, err
 				}
 				rows = append(rows, wallet)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -2329,11 +2296,10 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Claimed_IsNot_Null(ctx context.Contex
 func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx context.Context,
 	wallet_satellite Wallet_Satellite_Field) (
 	rows []*Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("SELECT wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at FROM wallets WHERE wallets.satellite = ? AND wallets.claimed is not NULL")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, wallet_satellite.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2345,7 +2311,7 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx 
 			if err != nil {
 				return nil, err
 			}
-			defer __rows.Close()
+			defer closeRows(__rows, &err)
 
 			for __rows.Next() {
 				wallet := &Wallet{}
@@ -2354,9 +2320,6 @@ func (obj *pgxcockroachImpl) All_Wallet_By_Satellite_And_Claimed_IsNot_Null(ctx 
 					return nil, err
 				}
 				rows = append(rows, wallet)
-			}
-			if err := __rows.Err(); err != nil {
-				return nil, err
 			}
 			return rows, nil
 		}()
@@ -2375,14 +2338,14 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Id(ctx context.Context,
 	wallet_id Wallet_Id_Field,
 	update Wallet_Update_Fields) (
 	wallet *Wallet, err error) {
-	defer mon.Task()(&ctx)(&err)
+
 	var __sets = &__sqlbundle_Hole{}
 
 	var __embed_stmt = __sqlbundle_Literals{Join: "", SQLs: []__sqlbundle_SQL{__sqlbundle_Literal("UPDATE wallets SET "), __sets, __sqlbundle_Literal(" WHERE wallets.id = ? RETURNING wallets.id, wallets.address, wallets.claimed, wallets.satellite, wallets.info, wallets.created_at")}}
 
 	__sets_sql := __sqlbundle_Literals{Join: ", "}
-	var __values []interface{}
-	var __args []interface{}
+	var __values []any
+	var __args []any
 
 	if update.Claimed._set {
 		__values = append(__values, update.Claimed.value())
@@ -2407,8 +2370,8 @@ func (obj *pgxcockroachImpl) Update_Wallet_By_Id(ctx context.Context,
 	obj.logStmt(__stmt, __values...)
 
 	wallet = &Wallet{}
-	err = obj.queryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
-	if err == sql.ErrNoRows {
+	err = obj.driver.QueryRowContext(ctx, __stmt, __values...).Scan(&wallet.Id, &wallet.Address, &wallet.Claimed, &wallet.Satellite, &wallet.Info, &wallet.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -2421,11 +2384,10 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_ChainId_And_Hash(ctx context.
 	block_header_chain_id BlockHeader_ChainId_Field,
 	block_header_hash BlockHeader_Hash_Field) (
 	deleted bool, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.chain_id = ? AND block_headers.hash = ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_chain_id.value(), block_header_hash.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2448,11 +2410,10 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_ChainId_And_Hash(ctx context.
 func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Context,
 	block_header_timestamp_less BlockHeader_Timestamp_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM block_headers WHERE block_headers.timestamp < ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, block_header_timestamp_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2475,11 +2436,10 @@ func (obj *pgxcockroachImpl) Delete_BlockHeader_By_Timestamp_Less(ctx context.Co
 func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context.Context,
 	token_price_interval_start_less TokenPrice_IntervalStart_Field) (
 	count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 
 	var __embed_stmt = __sqlbundle_Literal("DELETE FROM token_prices WHERE token_prices.interval_start < ?")
 
-	var __values []interface{}
+	var __values []any
 	__values = append(__values, token_price_interval_start_less.value())
 
 	var __stmt = __sqlbundle_Render(obj.dialect, __embed_stmt)
@@ -2499,8 +2459,7 @@ func (obj *pgxcockroachImpl) Delete_TokenPrice_By_IntervalStart_Less(ctx context
 
 }
 
-func (impl pgxcockroachImpl) isConstraintError(err error) (
-	constraint string, ok bool) {
+func (impl pgxcockroachImpl) isConstraintError(err error) (constraint string, ok bool) {
 	if e, ok := err.(*pgconn.PgError); ok {
 		if e.Code[:2] == "23" {
 			return e.ConstraintName, true
@@ -2510,7 +2469,6 @@ func (impl pgxcockroachImpl) isConstraintError(err error) (
 }
 
 func (obj *pgxcockroachImpl) deleteAll(ctx context.Context) (count int64, err error) {
-	defer mon.Task()(&ctx)(&err)
 	var __res sql.Result
 	var __count int64
 	__res, err = obj.driver.ExecContext(ctx, "DELETE FROM wallets;")
@@ -2650,7 +2608,9 @@ type txMethods interface {
 type DBMethods interface {
 	Methods
 
-	Schema() string
+	Schema() []string
+	DropSchema() []string
+
 	Rebind(sql string) string
 }
 

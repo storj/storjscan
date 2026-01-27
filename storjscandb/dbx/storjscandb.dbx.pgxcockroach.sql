@@ -7,12 +7,12 @@ CREATE TABLE block_headers (
 	timestamp timestamp with time zone NOT NULL,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( chain_id, hash )
-);
+) ;
 CREATE TABLE token_prices (
 	interval_start timestamp with time zone NOT NULL,
 	price bigint NOT NULL,
 	PRIMARY KEY ( interval_start )
-);
+) ;
 CREATE TABLE wallets (
 	id bigserial NOT NULL,
 	address bytea NOT NULL,
@@ -21,6 +21,6 @@ CREATE TABLE wallets (
 	info text,
 	created_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
 	PRIMARY KEY ( id )
-);
+) ;
 CREATE INDEX wallets_satellite_index ON wallets ( satellite ) ;
-CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address ) ;
+CREATE UNIQUE INDEX wallets_address_unique_index ON wallets ( address )
