@@ -28,7 +28,7 @@ node('node') {
 
       echo "Current build result: ${currentBuild.result}"
     }
-    
+
     stage('Push Images') {
       lastStage = env.STAGE_NAME
       sh 'make push-images'
@@ -38,8 +38,9 @@ node('node') {
 
     stage('Upload') {
       lastStage = env.STAGE_NAME
+      sh 'make compress-binaries'
       sh 'make binaries-upload'
-    
+
       echo "Current build result: ${currentBuild.result}"
     }
   }

@@ -53,20 +53,12 @@ binaries: ## Build storjscan binaries
 push-images: ## Push Docker images to Docker Hub
 	docker bake -f docker-bake.hcl image --push
 
+.PHONY: compress-binaries
+compress-binaries: ## Compress release binaries for uploading
+	./scripts/release/compress-binaries.sh "release/${TAG}"
+
 .PHONY: binaries-upload
 binaries-upload: ## Upload release binaries to GCS
-	cd "release/${TAG}"; for f in *; do \
-		c="$${f%%_*}" \
-		&& if [ "$${f##*.}" != "$${f}" ]; then \
-			ln -s "$${f}" "$${f%%_*}.$${f##*.}" \
-			&& zip "$${f}.zip" "$${f%%_*}.$${f##*.}" \
-			&& rm "$${f%%_*}.$${f##*.}" \
-		; else \
-			ln -sf "$${f}" "$${f%%_*}" \
-			&& zip "$${f}.zip" "$${f%%_*}" \
-			&& rm "$${f%%_*}" \
-		; fi \
-	; done
 	cd "release/${TAG}"; gsutil -m cp -r *.zip "gs://storj-v3-alpha-builds/${TAG}/"
 
 ##@ Release/Private Jenkins/Clean

@@ -32,7 +32,7 @@ tmp/
 storjscan.last
 
 test/
-release/
+/release
 
 .history/
 test-blockchain/TestToken.abi
