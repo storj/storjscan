@@ -10,8 +10,8 @@ variable "LATEST_STABLE_TAG" {
   default = ""
 }
 
-// LATEST_DEV_TAG controls whether to also tag images as "dev".
-// Set to "-dev" to add the latest tag, or "" to skip it.
+// LATEST_DEV_TAG controls what to tag images as "dev".
+// These are useful for development and running the latest development version.
 variable "LATEST_DEV_TAG" {
   default = "dev"
 }
