@@ -1,6 +1,6 @@
 module storj.io/storjscan
 
-go 1.20
+go 1.25
 
 require (
 	github.com/btcsuite/btcd v0.22.3

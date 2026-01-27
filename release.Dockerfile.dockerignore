@@ -1,0 +1,13 @@
+# ignore dot files
+**/.vscode
+**/.idea
+
+# except git files
+!.git*
+
+# ignore temporary files
+**/*~
+/*.swp
+
+# ignore built releases
+release/

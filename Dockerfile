@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # parent image
-FROM golang:1.20-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Build Delve
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
@@ -27,7 +27,7 @@ RUN go build -gcflags="all=-N -l" -o build/ ./cmd/storjscan
 ##################################
 
 # parent image
-FROM alpine:3.12.2
+FROM alpine:3.23.2
 
 # copy binary file from the `builder` stage
 COPY --from=builder /app/build/storjscan /var/lib/storj/go/bin/
