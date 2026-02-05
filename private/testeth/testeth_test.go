@@ -88,9 +88,13 @@ func TestTokenTransferMultipleNetworks(t *testing.T) {
 	testeth.Run(t, 10, 2, func(ctx *testcontext.Context, t *testing.T, networks []*testeth.Network) {
 		// connect to both networks
 		var clients []*ethclient.Client
+		defer func() {
+			for _, client := range clients {
+				client.Close()
+			}
+		}()
 		for _, network := range networks {
 			client := network.Dial()
-			defer client.Close()
 			clients = append(clients, client)
 		}
 

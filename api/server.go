@@ -108,7 +108,9 @@ func (server *Server) Run(ctx context.Context) (err error) {
 	return Error.Wrap(group.Wait())
 }
 
-var apiID struct{}
+type apiIDKey struct{}
+
+var apiID apiIDKey
 
 // authorize validates request authorization using the provided api key found in the request header.
 func (server *Server) authorize(next http.Handler) http.Handler {

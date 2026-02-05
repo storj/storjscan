@@ -11,9 +11,9 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 
+	"storj.io/storj/private/migrate"
 	"storj.io/storj/shared/dbutil"
 	"storj.io/storj/shared/dbutil/pgutil"
-	"storj.io/storj/private/migrate"
 	"storj.io/storj/shared/tagsql"
 	"storj.io/storjscan/blockchain"
 	"storj.io/storjscan/storjscandb/dbx"

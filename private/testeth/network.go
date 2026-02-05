@@ -16,8 +16,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/node"
@@ -32,23 +32,20 @@ type Network struct {
 	keystore  *keystore.KeyStore
 	developer accounts.Account
 	token     common.Address
+	beacon    *catalyst.SimulatedBeacon
 }
 
-func minerTestGenesisBlock(chainID, period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
-	config := *params.AllCliqueProtocolChanges
-	config.Clique = &params.CliqueConfig{
-		Period: period,
-		Epoch:  config.Clique.Epoch,
-	}
+func minerTestGenesisBlock(chainID uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
+	// Use AllDevChainProtocolChanges with SimulatedBeacon for automatic block production
+	config := *params.AllDevChainProtocolChanges
 	config.ChainID = big.NewInt(int64(chainID))
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &core.Genesis{
 		Config:     &config,
-		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
 		GasLimit:   gasLimit,
 		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(1),
-		Alloc: map[common.Address]core.GenesisAccount{
+		Difficulty: big.NewInt(0),
+		Alloc: map[common.Address]types.Account{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
 			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
@@ -93,9 +90,9 @@ func NewNetwork(nodeConfig node.Config, ethConfig ethconfig.Config, numAccounts 
 		}
 	}
 
-	ethConfig.Genesis = minerTestGenesisBlock(ethConfig.NetworkId, 0, 11500000, base.Address)
+	ethConfig.Genesis = minerTestGenesisBlock(ethConfig.NetworkId, 11500000, base.Address)
 	for _, acc := range preFund {
-		ethConfig.Genesis.Alloc[acc.Address] = core.GenesisAccount{
+		ethConfig.Genesis.Alloc[acc.Address] = types.Account{
 			Balance: new(big.Int).Mul(big.NewInt(100), big.NewInt(params.Ether)),
 		}
 	}
@@ -103,11 +100,19 @@ func NewNetwork(nodeConfig node.Config, ethConfig ethconfig.Config, numAccounts 
 	backend, ethereum := utils.RegisterEthService(stack, &ethConfig)
 
 	utils.RegisterFilterAPI(stack, backend, &ethConfig)
+
+	// Create a simulated beacon with period=0 to auto-produce blocks on every transactiony
+	beacon, err := catalyst.NewSimulatedBeacon(0, base.Address, ethereum)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Network{
 		ethereum:  ethereum,
 		stack:     stack,
 		keystore:  ks,
 		developer: base,
+		beacon:    beacon,
 	}, nil
 }
 
@@ -151,9 +156,13 @@ func (network *Network) TransactOptions(ctx context.Context, account accounts.Ac
 }
 
 // WaitForTx block execution until transaction receipt is received or context is cancelled.
+// It manually commits a block to ensure the transaction is included.
 func (network *Network) WaitForTx(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	client := network.Dial()
 	defer client.Close()
+
+	// Manually commit a block to include pending transactions
+	network.Commit()
 
 	c := make(chan core.ChainHeadEvent)
 	defer close(c)
@@ -168,7 +177,8 @@ func (network *Network) WaitForTx(ctx context.Context, hash common.Hash) (*types
 		}
 		return rcpt, errs.New("transaction failed")
 	}
-	if !errors.Is(err, ethereum.NotFound) {
+	// keep waiting if not yet found or still in progress.
+	if !errors.Is(err, ethereum.NotFound) && !isIndexingInProgress(err) {
 		return rcpt, err
 	}
 
@@ -186,23 +196,42 @@ func (network *Network) WaitForTx(ctx context.Context, hash common.Hash) (*types
 			}
 			return rcpt, errs.New("transaction failed")
 		}
-		if !errors.Is(err, ethereum.NotFound) {
+		// Treat indexing errors as temporary - keep waiting
+		if !errors.Is(err, ethereum.NotFound) && !isIndexingInProgress(err) {
 			return rcpt, err
 		}
 	}
 }
 
-// Start starts all registered lifecycles, RPC services, p2p networking and starts mining.
+// isIndexingInProgress checks if the error is the "transaction indexing is in progress" error
+func isIndexingInProgress(err error) bool {
+	return err != nil && (err.Error() == "transaction indexing is in progress")
+}
+
+// Start starts all registered lifecycles, RPC services, p2p networking and the simulated beacon.
+// The simulated beacon automatically produces blocks on every transaction (period=0).
 func (network *Network) Start() error {
 	if err := network.stack.Start(); err != nil {
 		return err
 	}
 
 	network.ethereum.TxPool().SetGasTip(big.NewInt(params.GWei))
-	return network.ethereum.StartMining()
+
+	return network.beacon.Start()
 }
 
-// Close stops the node and releases resources acquired in node constructor.
+// Commit produces a new block with pending transactions.
+// This is useful for ensuring transactions are included in a block immediately.
+func (network *Network) Commit() common.Hash {
+	return network.beacon.Commit()
+}
+
+// Close stops the beacon and node, releasing all resources.
 func (network *Network) Close() error {
+	if network.beacon != nil {
+		if err := network.beacon.Stop(); err != nil {
+			return err
+		}
+	}
 	return network.stack.Close()
 }

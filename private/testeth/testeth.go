@@ -7,9 +7,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 
 	"storj.io/common/testcontext"
 )
@@ -36,19 +36,23 @@ func Run(t *testing.T, numNetworks, numAccounts int, test func(ctx *testcontext.
 		nodeConfig.P2P.DiscoveryV5 = false
 
 		var networks []*Network
+		defer func() {
+			for _, network := range networks {
+				ctx.Check(network.Close)
+			}
+		}()
 		for i := 0; i < numNetworks; i++ {
 			// eth config
 			ethConfig := ethconfig.Defaults
 			ethConfig.NetworkId = 1337 + uint64(i)
-			ethConfig.SyncMode = downloader.FullSync
-			ethConfig.Miner.GasPrice = big.NewInt(1)
+			ethConfig.SyncMode = ethconfig.FullSync
+			ethConfig.Miner.GasPrice = big.NewInt(params.GWei)
 			ethConfig.FilterLogCacheSize = 100
 
 			network, err := NewNetwork(nodeConfig, ethConfig, numAccounts)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer ctx.Check(network.Close)
 
 			if err = network.Start(); err != nil {
 				t.Fatal(err)

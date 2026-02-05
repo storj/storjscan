@@ -8,18 +8,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/spacemonkeygo/monkit/v3"
-	"github.com/zeebo/errs"
 	pgxerrcode "github.com/jackc/pgerrcode"
+	"github.com/zeebo/errs"
 
-	"storj.io/storj/shared/dbutil/txutil"
 	"storj.io/storj/shared/dbutil/pgutil/pgerrcode"
+	"storj.io/storj/shared/dbutil/txutil"
 	"storj.io/storj/shared/tagsql"
 )
 
 //go:generate sh gen.sh
-
-var mon = monkit.Package()
 
 func init() {
 	// catch dbx errors

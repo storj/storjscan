@@ -64,10 +64,12 @@ func TestImport(t *testing.T) {
 		importFile, err := os.Create(importFilePath)
 		require.NoError(t, err)
 
-		fmt.Fprintln(importFile, "address,info")
+		_, err = fmt.Fprintln(importFile, "address,info")
+		require.NoError(t, err)
 		for _, address := range addressesSlice {
 			info := addresses[address]
-			fmt.Fprintf(importFile, "%s,%s\n", address.String(), info)
+			_, err = fmt.Fprintf(importFile, "%s,%s\n", address.String(), info)
+			require.NoError(t, err)
 		}
 		require.NoError(t, importFile.Close())
 
