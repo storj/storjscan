@@ -15,6 +15,7 @@ import (
 type KeyPair struct {
 	PrivateKey *ecdsa.PrivateKey
 	Address    common.Address
+	LineNum    int
 }
 
 // LoadKeys reads private keys from a file (hex without 0x prefix, one per line)
@@ -40,7 +41,7 @@ func LoadKeys(path string) ([]KeyPair, error) {
 			return nil, fmt.Errorf("line %d: invalid private key: %w", lineNum, err)
 		}
 		addr := crypto.PubkeyToAddress(pk.PublicKey)
-		keys = append(keys, KeyPair{PrivateKey: pk, Address: addr})
+		keys = append(keys, KeyPair{PrivateKey: pk, Address: addr, LineNum: lineNum})
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("reading key file: %w", err)

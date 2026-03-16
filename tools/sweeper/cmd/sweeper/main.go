@@ -26,6 +26,8 @@ func main() {
 	gasSourceFlag := flag.String("gas-source", "", "Path to file containing private key (hex, no 0x) of a wallet with ETH for gas funding")
 	filterKeysFlag := flag.String("filter-keys", "", "Comma-separated list of public addresses to filter (only sweep these)")
 	rateDelay := flag.Duration("rate-delay", 200*time.Millisecond, "Delay between RPC calls per key")
+	maxFailures := flag.Int("max-failures", 25, "Maximum number of wallet failures before aborting (0 for unlimited)")
+	receiptTimeout := flag.Duration("receipt-timeout", 30*time.Minute, "Maximum time to wait for a transaction to be mined")
 
 	flag.Parse()
 
@@ -125,10 +127,12 @@ func main() {
 
 	// Create retry-wrapped clients.
 	ethRetry := sweeper.NewRetryClient(ethClient, logger)
+	ethRetry.SetReceiptTimeout(*receiptTimeout)
 	zkRetry := sweeper.NewRetryClient(zkClient, logger)
+	zkRetry.SetReceiptTimeout(*receiptTimeout)
 
 	// Create and run sweeper.
-	sw := sweeper.NewSweeper(ethRetry, zkRetry, dest, ethTokens, zkTokens, gasSource, *rateDelay, logger)
+	sw := sweeper.NewSweeper(ethRetry, zkRetry, dest, ethTokens, zkTokens, gasSource, *rateDelay, *maxFailures, logger)
 
 	logger.Info("starting sweep", "keys", len(keys), "ethTokens", len(ethTokens), "zkTokens", len(zkTokens))
 

@@ -26,16 +26,23 @@ type BlockchainClient interface {
 
 // RetryClient wraps a BlockchainClient with exponential backoff retry logic.
 type RetryClient struct {
-	client BlockchainClient
-	logger *slog.Logger
+	client         BlockchainClient
+	logger         *slog.Logger
+	receiptTimeout time.Duration
 }
 
 // NewRetryClient creates a new RetryClient wrapping the given BlockchainClient.
 func NewRetryClient(client BlockchainClient, logger *slog.Logger) *RetryClient {
 	return &RetryClient{
-		client: client,
-		logger: logger,
+		client:         client,
+		logger:         logger,
+		receiptTimeout: 30 * time.Minute,
 	}
+}
+
+// SetReceiptTimeout sets the maximum time to wait for a transaction receipt.
+func (r *RetryClient) SetReceiptTimeout(d time.Duration) {
+	r.receiptTimeout = d
 }
 
 func (r *RetryClient) newBackoff() *backoff.ExponentialBackOff {
@@ -102,10 +109,17 @@ func (r *RetryClient) CallContract(ctx context.Context, msg ethereum.CallMsg, bl
 
 func (r *RetryClient) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 	// Polling for a receipt until the tx is mined is normal — use Debug so it
-	// doesn't appear as noise in standard output.
-	return retry(ctx, r, "TransactionReceipt", slog.LevelDebug, func() (*types.Receipt, error) {
-		return r.client.TransactionReceipt(ctx, txHash)
-	})
+	// doesn't appear as noise in standard output.  Use a longer timeout than
+	// regular RPC calls since mining can take much longer than a typical retry
+	// window (the default 15m was too short for mainnet congestion).
+	return backoff.Retry(ctx, func() (*types.Receipt, error) {
+		result, err := r.client.TransactionReceipt(ctx, txHash)
+		if err != nil {
+			r.logger.Log(ctx, slog.LevelDebug, "retrying RPC call", "op", "TransactionReceipt", "error", err)
+			return result, err
+		}
+		return result, nil
+	}, backoff.WithBackOff(r.newBackoff()), backoff.WithMaxElapsedTime(r.receiptTimeout))
 }
 
 // WaitMined polls for a transaction receipt until the transaction is confirmed.

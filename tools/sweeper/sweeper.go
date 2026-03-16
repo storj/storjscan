@@ -12,6 +12,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// SweepFailure records a failed sweep attempt.
+type SweepFailure struct {
+	Network string
+	Address common.Address
+	LineNum int
+	Err     error
+}
+
 // Sweeper orchestrates sweeping ETH and ERC20 tokens from deposit wallets
 // into a single destination address.
 type Sweeper struct {
@@ -22,10 +30,11 @@ type Sweeper struct {
 	zkTokens    []common.Address
 	gasSource   *KeyPair
 	rateDelay   time.Duration
+	maxFailures int
 	logger      *slog.Logger
 }
 
-// NewSweeper creates a new Sweeper.
+// NewSweeper creates a new Sweeper. Set maxFailures to 0 for unlimited.
 func NewSweeper(
 	ethClient BlockchainClient,
 	zkClient BlockchainClient,
@@ -34,6 +43,7 @@ func NewSweeper(
 	zkTokens []common.Address,
 	gasSource *KeyPair,
 	rateDelay time.Duration,
+	maxFailures int,
 	logger *slog.Logger,
 ) *Sweeper {
 	return &Sweeper{
@@ -44,19 +54,47 @@ func NewSweeper(
 		zkTokens:    zkTokens,
 		gasSource:   gasSource,
 		rateDelay:   rateDelay,
+		maxFailures: maxFailures,
 		logger:      logger,
 	}
 }
 
 // SweepAll sweeps all keys on both Ethereum and zkSync networks.
+// Individual wallet failures are logged and collected rather than stopping the
+// sweep. If maxFailures > 0 and that many wallets fail, the sweep is aborted
+// early (circuit breaker). All failures are logged as a summary at the end.
 func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
+	var failures []SweepFailure
 	for _, kp := range keys {
 		if err := s.sweepKey(ctx, kp, s.ethClient, s.ethTokens, "ethereum"); err != nil {
-			return fmt.Errorf("sweep ethereum %s: %w", kp.Address.Hex(), err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			s.logger.Error("sweep failed, continuing", "network", "ethereum", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
+			failures = append(failures, SweepFailure{Network: "ethereum", Address: kp.Address, LineNum: kp.LineNum, Err: err})
+			if s.maxFailures > 0 && len(failures) >= s.maxFailures {
+				s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
+				break
+			}
 		}
 		if err := s.sweepKey(ctx, kp, s.zkClient, s.zkTokens, "zksync"); err != nil {
-			return fmt.Errorf("sweep zksync %s: %w", kp.Address.Hex(), err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			s.logger.Error("sweep failed, continuing", "network", "zksync", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
+			failures = append(failures, SweepFailure{Network: "zksync", Address: kp.Address, LineNum: kp.LineNum, Err: err})
+			if s.maxFailures > 0 && len(failures) >= s.maxFailures {
+				s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
+				break
+			}
 		}
+	}
+	if len(failures) > 0 {
+		s.logger.Error("sweep completed with failures", "total", len(failures))
+		for _, f := range failures {
+			s.logger.Error("failed address", "network", f.Network, "address", f.Address.Hex(), "keyLine", f.LineNum, "error", f.Err)
+		}
+		return fmt.Errorf("%d address(es) failed to sweep", len(failures))
 	}
 	return nil
 }
