@@ -49,6 +49,36 @@ func LoadKeys(path string) ([]KeyPair, error) {
 	return keys, nil
 }
 
+// LoadFilterAddresses reads public addresses from a file (hex, one per line)
+// and returns them. Empty lines and whitespace are ignored. Lines may optionally
+// include a 0x prefix. All addresses are normalized to lowercase for comparison.
+func LoadFilterAddresses(path string) ([]common.Address, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("opening filter file: %w", err)
+	}
+	defer f.Close()
+
+	var addrs []common.Address
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if !common.IsHexAddress(line) {
+			return nil, fmt.Errorf("line %d: invalid address: %s", lineNum, line)
+		}
+		addrs = append(addrs, common.HexToAddress(line))
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading filter file: %w", err)
+	}
+	return addrs, nil
+}
+
 // FilterKeys returns only the KeyPairs whose addresses are in the given list.
 func FilterKeys(keys []KeyPair, addresses []common.Address) []KeyPair {
 	allowed := make(map[common.Address]struct{}, len(addresses))

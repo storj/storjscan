@@ -25,6 +25,7 @@ func main() {
 	zkTokensFlag := flag.String("zksync-tokens", "", "Comma-separated list of ERC20 contract addresses on zkSync Era")
 	gasSourceFlag := flag.String("gas-source", "", "Path to file containing private key (hex, no 0x) of a wallet with ETH for gas funding")
 	filterKeysFlag := flag.String("filter-keys", "", "Comma-separated list of public addresses to filter (only sweep these)")
+	filterFlag := flag.String("filter-file", "", "Path to file of public addresses to filter (hex, one per line, only sweep these)")
 	rateDelay := flag.Duration("rate-delay", 200*time.Millisecond, "Delay between RPC calls per key")
 	maxFailures := flag.Int("max-failures", 25, "Maximum number of wallet failures before aborting (0 for unlimited)")
 	receiptTimeout := flag.Duration("receipt-timeout", 30*time.Minute, "Maximum time to wait for a transaction to be mined")
@@ -68,8 +69,16 @@ func main() {
 	logger.Info("loaded keys", "count", len(keys))
 
 	// Filter keys if specified.
+	var filterAddrs []common.Address
+	if *filterFlag != "" {
+		addrs, err := sweeper.LoadFilterAddresses(*filterFlag)
+		if err != nil {
+			logger.Error("failed to load filter addresses", "error", err)
+			os.Exit(1)
+		}
+		filterAddrs = append(filterAddrs, addrs...)
+	}
 	if *filterKeysFlag != "" {
-		var filterAddrs []common.Address
 		for _, addrStr := range strings.Split(*filterKeysFlag, ",") {
 			addrStr = strings.TrimSpace(addrStr)
 			if addrStr == "" {
@@ -81,6 +90,8 @@ func main() {
 			}
 			filterAddrs = append(filterAddrs, common.HexToAddress(addrStr))
 		}
+	}
+	if len(filterAddrs) > 0 {
 		keys = sweeper.FilterKeys(keys, filterAddrs)
 		logger.Info("filtered keys", "count", len(keys))
 	}
