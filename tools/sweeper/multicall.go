@@ -219,54 +219,67 @@ func encodeAggregate3(calls []callDesc) ([]byte, error) {
 //
 // Return type: (bool success, bytes returnData)[]
 //
-// Layout:
+// Because the tuple contains a bytes field it is dynamic, so the array uses a
+// per-element offset table (same two-level indirection as the encoding):
 //
-//	[0]  offset to array (0x20)
-//	[1]  array length
-//	[2+] per-element: success(32) + dataOffset(32) ... bytes data
+//	[0]   outer offset (0x20) → array content starts at [32]
+//	[32]  array length n
+//	[64]  n × per-element offset words (relative to start of array content, i.e. [32])
+//	      each offset points to the element encoding:
+//	        success (32 bytes)
+//	        offset to returnData bytes relative to start of element (32 bytes, always 0x40)
+//	        bytes length (32 bytes)
+//	        bytes data (padded to 32)
 func decodeAggregate3Results(data []byte, n int) ([][]byte, error) {
-	// Minimum: 32 (outer offset) + 32 (length) = 64 bytes
 	if len(data) < 64 {
 		return nil, fmt.Errorf("response too short: %d bytes", len(data))
 	}
 
-	// outer offset (we trust it's 0x20)
 	arrayStart := int(new(big.Int).SetBytes(safeSlice(data, 0, 32)).Uint64())
 	if arrayStart+32 > len(data) {
 		return nil, fmt.Errorf("array start out of bounds")
 	}
-	arrayLen := int(new(big.Int).SetBytes(safeSlice(data, arrayStart, arrayStart+32)).Uint64())
+	// arrayContent is where the length word + offset table live; offsets are relative to it.
+	arrayContent := arrayStart
+	arrayLen := int(new(big.Int).SetBytes(safeSlice(data, arrayContent, arrayContent+32)).Uint64())
 	if arrayLen != n {
 		return nil, fmt.Errorf("unexpected result count: got %d, want %d", arrayLen, n)
 	}
 
-	// Each element head is at arrayStart+32 + i*64 (success word + data-offset word).
+	// Per-element offset table starts right after the length word.
+	// Each offset is relative to the start of the offset table (not arrayContent).
+	offsetTableBase := arrayContent + 32
+
 	results := make([][]byte, n)
-	elemBase := arrayStart + 32
 	for i := range n {
-		elemHeadOff := elemBase + i*64
-		if elemHeadOff+64 > len(data) {
+		// Read the per-element offset (relative to offsetTableBase).
+		offWord := offsetTableBase + i*32
+		if offWord+32 > len(data) {
+			return nil, fmt.Errorf("element %d offset word out of bounds", i)
+		}
+		elemRelOff := int(new(big.Int).SetBytes(safeSlice(data, offWord, offWord+32)).Uint64())
+		elemStart := offsetTableBase + elemRelOff
+
+		// Element layout: success(32) + bytesOffset(32) + bytesLen(32) + bytes
+		if elemStart+64 > len(data) {
 			return nil, fmt.Errorf("element %d head out of bounds", i)
 		}
+		success := data[elemStart+31] != 0
 
-		// success word
-		success := data[elemHeadOff+31] != 0
-
-		// offset to bytes returnData, relative to start of array content (elemBase)
-		dataRelOff := int(new(big.Int).SetBytes(safeSlice(data, elemHeadOff+32, elemHeadOff+64)).Uint64())
-		dataAbsOff := elemBase + dataRelOff
-		if dataAbsOff+32 > len(data) {
+		// offset to returnData bytes, relative to start of this element
+		bytesRelOff := int(new(big.Int).SetBytes(safeSlice(data, elemStart+32, elemStart+64)).Uint64())
+		bytesLenOff := elemStart + bytesRelOff
+		if bytesLenOff+32 > len(data) {
 			return nil, fmt.Errorf("element %d data offset out of bounds", i)
 		}
 
-		bytesLen := int(new(big.Int).SetBytes(safeSlice(data, dataAbsOff, dataAbsOff+32)).Uint64())
-		if dataAbsOff+32+bytesLen > len(data) {
+		bytesLen := int(new(big.Int).SetBytes(safeSlice(data, bytesLenOff, bytesLenOff+32)).Uint64())
+		if bytesLenOff+32+bytesLen > len(data) {
 			return nil, fmt.Errorf("element %d data out of bounds", i)
 		}
-		payload := data[dataAbsOff+32 : dataAbsOff+32+bytesLen]
+		payload := data[bytesLenOff+32 : bytesLenOff+32+bytesLen]
 
 		if !success || len(payload) < 32 {
-			// Treat failed or empty calls as zero balance.
 			results[i] = make([]byte, 32)
 		} else {
 			results[i] = payload[len(payload)-32:]

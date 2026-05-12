@@ -14,42 +14,39 @@ import (
 // testing. Each value in vals is encoded as a successful (bool success, bytes
 // returnData) tuple where returnData is the 32-byte big-endian representation
 // of the value.
+//
+// The return type (bool,bytes)[] is an array of dynamic tuples, so it uses the
+// two-level ABI encoding: a per-element offset table followed by the element
+// bodies. This must match what a real Multicall3 contract returns.
+//
+// Layout:
+//
+//	32             outer offset (0x20)
+//	32             array length n
+//	n×32           per-element offset table (offsets relative to start of array content)
+//	n × (32+32+32+32)  element bodies: success + bytesRelOff(0x40) + bytesLen(32) + 32-byte value
 func encodeAggregate3Response(vals []*big.Int) []byte {
 	n := len(vals)
 
-	// Layout (all sizes in bytes):
-	//   32  outer offset (= 0x20)
-	//   32  array length
-	//   n*64  element heads: success(32) + dataOffset(32)
-	//   n*64  element tails: bytesLen(32) + 32-byte payload
+	// Each element body is 4×32 = 128 bytes.
+	// Per-element offset table is n×32 bytes.
+	// Element i starts at: n*32 (table) + i*128 (preceding bodies), relative to arrayContent.
+	buf := make([]byte, 0, 32+32+n*32+n*128)
 
-	// dataOffset for element i is relative to the start of the array content
-	// (i.e., right after the outer-offset and length words).
-	// Array content starts at byte 64 (0x40) from the start of the return data.
-	// Element heads occupy n*64 bytes.
-	// Element i's tail starts at n*64 + i*64 bytes from the start of array content.
-
-	buf := make([]byte, 0, 64+n*128)
-
-	// outer offset
-	buf = appendUint256(buf, 0x20)
-	// array length
+	buf = appendUint256(buf, 0x20) // outer offset
 	buf = appendUint256(buf, uint64(n))
 
-	// heads
+	// Per-element offset table.
 	for i := range n {
-		// success = true
-		buf = appendUint256(buf, 1)
-		// offset to bytes returnData, relative to start of array content (after length word)
-		// = n*64 (all heads) + i*64 (preceding tails)
-		buf = appendUint256(buf, uint64(n*64+i*64))
+		off := uint64(n*32 + i*128)
+		buf = appendUint256(buf, off)
 	}
 
-	// tails
+	// Element bodies.
 	for _, v := range vals {
-		// bytes length = 32
-		buf = appendUint256(buf, 32)
-		// 32-byte value
+		buf = appendUint256(buf, 1)    // success = true
+		buf = appendUint256(buf, 0x40) // offset to returnData bytes, relative to element start (2×32)
+		buf = appendUint256(buf, 32)   // bytes length
 		var word [32]byte
 		v.FillBytes(word[:])
 		buf = append(buf, word[:]...)
