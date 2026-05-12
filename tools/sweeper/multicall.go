@@ -150,92 +150,68 @@ func callAggregate3(ctx context.Context, client BlockchainClient, calls []callDe
 //
 // aggregate3((address target, bool allowFailure, bytes callData)[])
 //
-// ABI layout (all offsets in 32-byte words):
+// The array element type is a dynamic tuple (it contains a `bytes` field), so
+// the ABI encoding requires two layers of indirection:
 //
-//	[0]  selector (4 bytes) + offset to array (32 bytes) = 36 bytes head
-//	     offset = 0x20 (points past the 32-byte length word)
-//	[1]  array length
-//	[2+] array elements, each tuple encoded inline:
-//	       word 0: target address (right-padded to 32 bytes)
-//	       word 1: allowFailure bool (0)
-//	       word 2: offset to callData bytes (relative to start of this tuple)
-//	       ...callData bytes...
+//	selector (4 bytes)
+//	offset to array content (0x20)          ← points past this word
+//	array length (n)
+//	n × per-element offset words            ← each points to that element's encoding
+//	n × element encodings, each:
+//	  target       (32 bytes)
+//	  allowFailure (32 bytes, 1 = true)
+//	  offset to callData bytes (relative to start of this element's encoding, always 0x60)
+//	  callData length (32 bytes)
+//	  callData padded to 32-byte boundary
 func encodeAggregate3(calls []callDesc) ([]byte, error) {
 	n := len(calls)
 
-	// Each call has fixed head: target(32) + allowFailure(32) + dataOffset(32) = 96 bytes
-	// plus the bytes payload: length(32) + data padded to 32-byte boundary.
-	// We also need the outer ABI head: selector(4) + arrayOffset(32) + arrayLen(32).
-
-	// First pass: compute per-element data sizes and total size.
-	type encodedCall struct {
-		target [32]byte
-		data   []byte
-	}
-	encoded := make([]encodedCall, n)
+	// Compute per-element encoded sizes for building the element-offset table.
+	// Each element encodes as: 3×32 (head) + 32 (bytes length) + roundUp32(data).
+	elemSizes := make([]uint64, n)
 	for i, c := range calls {
-		copy(encoded[i].target[12:], c.target.Bytes())
-		encoded[i].data = c.data
+		dataLen := uint64(len(c.data))
+		paddedLen := (dataLen + 31) &^ 31
+		elemSizes[i] = 96 + 32 + paddedLen
 	}
 
-	// Build the buffer.
-	// Outer header: 4 (selector) + 32 (array offset = 0x20) + 32 (array length)
-	// Per element head (3 words each): 96 bytes
-	// Per element tail: 32 (data length) + len(data) rounded up to 32
-	buf := make([]byte, 0, 4+32+32+n*96)
+	// Per-element offset table: offsets are relative to the start of array content
+	// (right after the length word). The table itself is n×32 bytes; element i
+	// starts after the table and all preceding elements.
+	elemOffsets := make([]uint64, n)
+	base := uint64(n * 32) // table size
+	for i := range n {
+		elemOffsets[i] = base
+		base += elemSizes[i]
+	}
 
-	// selector
+	var buf []byte
 	buf = append(buf, aggregate3MethodID[:]...)
-
-	// offset to array (0x20 = 32, pointing right after this word)
-	buf = appendUint256(buf, 0x20)
-
-	// array length
+	buf = appendUint256(buf, 0x20) // offset to array content
 	buf = appendUint256(buf, uint64(n))
 
-	// For each call we need to know the offset of its `bytes callData` relative
-	// to the start of the tuple. Each tuple head is 3 words (96 bytes). The
-	// bytes data for call i starts after all the tuple heads of all n calls,
-	// then after all the bytes payloads of calls 0..i-1.
-	//
-	// offset_i = (n-i-1)*96 (remaining heads after this tuple's head)
-	//           + sum(32 + roundUp32(len(data[j])) for j < i)
-	//
-	// We build the heads first, then append the tails.
-
-	tailBuf := make([]byte, 0, n*64)
-	dataOffset := uint64((n) * 96) // offset from start of first tuple to first tail
-
-	// We need to track the running offset into tails for each element.
-	offsets := make([]uint64, n)
-	runningOffset := uint64(0)
-	for i, ec := range encoded {
-		offsets[i] = dataOffset - uint64(i)*96 + runningOffset
-		_ = ec
-		dataLen := uint64(len(encoded[i].data))
-		paddedLen := (dataLen + 31) &^ 31
-		runningOffset += 32 + paddedLen
+	// Per-element offset table.
+	for _, off := range elemOffsets {
+		buf = appendUint256(buf, off)
 	}
 
-	for i, ec := range encoded {
-		// target
-		buf = append(buf, ec.target[:]...)
-		// allowFailure = true — individual sub-call failures return zero rather than reverting the batch
-		buf = appendUint256(buf, 1)
-		// offset to callData bytes, relative to start of this tuple
-		buf = appendUint256(buf, offsets[i])
+	// Element encodings.
+	for _, c := range calls {
+		var target [32]byte
+		copy(target[12:], c.target.Bytes())
+		buf = append(buf, target[:]...)
+		buf = appendUint256(buf, 1)    // allowFailure = true
+		buf = appendUint256(buf, 0x60) // offset to callData bytes relative to this element (always 3×32)
 
-		// tail: length + padded data
-		dataLen := uint64(len(ec.data))
+		dataLen := uint64(len(c.data))
 		paddedLen := (dataLen + 31) &^ 31
-		tailBuf = appendUint256(tailBuf, dataLen)
-		tailBuf = append(tailBuf, ec.data...)
+		buf = appendUint256(buf, dataLen)
+		buf = append(buf, c.data...)
 		for pad := dataLen; pad < paddedLen; pad++ {
-			tailBuf = append(tailBuf, 0)
+			buf = append(buf, 0)
 		}
 	}
 
-	buf = append(buf, tailBuf...)
 	return buf, nil
 }
 
