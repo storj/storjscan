@@ -20,8 +20,7 @@ var multicall3Address = common.HexToAddress("0xcA11bde05977b3631167028862bE2a173
 var aggregate3MethodID = [4]byte{0x82, 0xad, 0x56, 0xcb}
 
 // multicallBatchSize is the number of individual calls packed into one eth_call.
-// Kept at 100 to stay within RPC provider eth_call sub-call limits.
-const multicallBatchSize = 100
+const multicallBatchSize = 500
 
 // WalletBalances holds the ETH and ERC20 balances for a single wallet returned
 // by a multicall query.
