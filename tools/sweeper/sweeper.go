@@ -64,28 +64,51 @@ func NewSweeper(
 // sweep. If maxFailures > 0 and that many wallets fail, the sweep is aborted
 // early (circuit breaker). All failures are logged as a summary at the end.
 func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	addrs := make([]common.Address, len(keys))
+	for i, kp := range keys {
+		addrs[i] = kp.Address
+	}
+
+	ethBalances, err := s.queryBalances(ctx, s.ethClient, addrs, s.ethTokens, "ethereum")
+	if err != nil {
+		return err
+	}
+
+	zkBalances, err := s.queryBalances(ctx, s.zkClient, addrs, s.zkTokens, "zksync")
+	if err != nil {
+		return err
+	}
+
 	var failures []SweepFailure
-	for _, kp := range keys {
-		if err := s.sweepKey(ctx, kp, s.ethClient, s.ethTokens, "ethereum"); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			s.logger.Error("sweep failed, continuing", "network", "ethereum", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
-			failures = append(failures, SweepFailure{Network: "ethereum", Address: kp.Address, LineNum: kp.LineNum, Err: err})
-			if s.maxFailures > 0 && len(failures) >= s.maxFailures {
-				s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
-				break
+	for i, kp := range keys {
+		if ethBalances[i].HasFunds() {
+			if err := s.sweepKey(ctx, kp, s.ethClient, s.ethTokens, "ethereum"); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.logger.Error("sweep failed, continuing", "network", "ethereum", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
+				failures = append(failures, SweepFailure{Network: "ethereum", Address: kp.Address, LineNum: kp.LineNum, Err: err})
+				if s.maxFailures > 0 && len(failures) >= s.maxFailures {
+					s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
+					break
+				}
 			}
 		}
-		if err := s.sweepKey(ctx, kp, s.zkClient, s.zkTokens, "zksync"); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			s.logger.Error("sweep failed, continuing", "network", "zksync", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
-			failures = append(failures, SweepFailure{Network: "zksync", Address: kp.Address, LineNum: kp.LineNum, Err: err})
-			if s.maxFailures > 0 && len(failures) >= s.maxFailures {
-				s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
-				break
+		if zkBalances[i].HasFunds() {
+			if err := s.sweepKey(ctx, kp, s.zkClient, s.zkTokens, "zksync"); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				s.logger.Error("sweep failed, continuing", "network", "zksync", "address", kp.Address.Hex(), "keyLine", kp.LineNum, "error", err)
+				failures = append(failures, SweepFailure{Network: "zksync", Address: kp.Address, LineNum: kp.LineNum, Err: err})
+				if s.maxFailures > 0 && len(failures) >= s.maxFailures {
+					s.logger.Error("circuit breaker tripped, aborting sweep", "failures", len(failures), "max", s.maxFailures)
+					break
+				}
 			}
 		}
 	}
@@ -298,4 +321,47 @@ func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, 
 	}
 
 	return nil
+}
+
+func (s *Sweeper) queryBalances(ctx context.Context, client BlockchainClient, addrs []common.Address, tokens []common.Address, network string) ([]WalletBalances, error) {
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s gas price: %w", network, err)
+	}
+	minETH := new(big.Int).Mul(gasPrice, big.NewInt(21000))
+
+	s.logger.Info("querying balances via multicall", "network", network, "wallets", len(addrs))
+	balances, err := MulticallBalances(ctx, s.logger, client, addrs, tokens, minETH)
+	if err != nil {
+		return nil, fmt.Errorf("multicall %s balances: %w", network, err)
+	}
+	logBalanceSummary(s.logger, network, balances, tokens)
+	return balances, nil
+}
+
+func logBalanceSummary(logger *slog.Logger, network string, balances []WalletBalances, tokens []common.Address) {
+	ethCount := 0
+	ethTotal := new(big.Int)
+	tokenCounts := make([]int, len(tokens))
+	tokenTotals := make([]*big.Int, len(tokens))
+	for i := range tokens {
+		tokenTotals[i] = new(big.Int)
+	}
+	for _, wb := range balances {
+		if wb.ETH.Sign() > 0 {
+			ethCount++
+			ethTotal.Add(ethTotal, wb.ETH)
+		}
+		for i, t := range wb.Tokens {
+			if t.Sign() > 0 {
+				tokenCounts[i]++
+				tokenTotals[i].Add(tokenTotals[i], t)
+			}
+		}
+	}
+	args := []any{"network", network, "ETH_wallets", ethCount, "ETH_total", ethTotal.String()}
+	for i, token := range tokens {
+		args = append(args, token.Hex()+"_wallets", tokenCounts[i], token.Hex()+"_total", tokenTotals[i].String())
+	}
+	logger.Info("balance check complete", args...)
 }

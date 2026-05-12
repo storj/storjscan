@@ -92,6 +92,10 @@ func TestIntegration_FullSweepFlow(t *testing.T) {
 				return big.NewInt(324), nil
 			},
 			callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+				if msg.To != nil && *msg.To == multicall3Address {
+					n := multicallCallCount(msg.Data)
+					return multicallValueResponse(n, tokenBalanceAmt), nil
+				}
 				result := make([]byte, 32)
 				tokenBalanceAmt.FillBytes(result)
 				return result, nil
