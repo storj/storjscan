@@ -1,7 +1,10 @@
+// Copyright (C) 2026 Storj Labs, Inc.
+// See LICENSE for copying information.
 package sweeper
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/big"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // BlockchainClient defines the interface for interacting with an Ethereum-compatible blockchain.
@@ -57,7 +61,10 @@ func retry[T any](ctx context.Context, r *RetryClient, op string, level slog.Lev
 	return backoff.Retry(ctx, func() (T, error) {
 		result, err := fn()
 		if err != nil {
-			r.logger.Log(ctx, level, "retrying RPC call", "op", op, "error", err)
+			var permErr *backoff.PermanentError
+			if !errors.As(err, &permErr) {
+				r.logger.Log(ctx, level, "retrying RPC call", "op", op, "error", err)
+			}
 			return result, err
 		}
 		return result, nil
@@ -103,7 +110,16 @@ func (r *RetryClient) ChainID(ctx context.Context) (*big.Int, error) {
 
 func (r *RetryClient) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	return retry(ctx, r, "CallContract", slog.LevelWarn, func() ([]byte, error) {
-		return r.client.CallContract(ctx, msg, blockNumber)
+		result, err := r.client.CallContract(ctx, msg, blockNumber)
+		if err != nil {
+			// Contract reverts (code 3) are deterministic — wrap as permanent so
+			// the retry loop exits immediately without logging a spurious retry.
+			var rpcErr rpc.Error
+			if errors.As(err, &rpcErr) && rpcErr.ErrorCode() == 3 {
+				return nil, backoff.Permanent(err)
+			}
+		}
+		return result, err
 	})
 }
 

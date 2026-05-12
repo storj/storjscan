@@ -1,3 +1,5 @@
+// Copyright (C) 2026 Storj Labs, Inc.
+// See LICENSE for copying information.
 package sweeper
 
 import (
@@ -28,9 +30,46 @@ func successReceipt() *types.Receipt {
 	return &types.Receipt{Status: types.ReceiptStatusSuccessful}
 }
 
+// multicallZeroResponse returns a valid aggregate3 response with n zero-value results.
+func multicallZeroResponse(n int) []byte {
+	vals := make([]*big.Int, n)
+	for i := range vals {
+		vals[i] = big.NewInt(0)
+	}
+	return encodeAggregate3Response(vals)
+}
+
+// multicallValueResponse returns a valid aggregate3 response where every result
+// is set to the given value.
+func multicallValueResponse(n int, val *big.Int) []byte {
+	vals := make([]*big.Int, n)
+	for i := range vals {
+		vals[i] = new(big.Int).Set(val)
+	}
+	return encodeAggregate3Response(vals)
+}
+
+// mockCallContract returns a callContractFn that routes Multicall3 aggregate3
+// calls to the provided multicallFn and all other calls to erc20Fn.
+func mockCallContract(
+	multicallFn func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error),
+	erc20Fn func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error),
+) func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	return func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			return multicallFn(ctx, msg, blockNumber)
+		}
+		return erc20Fn(ctx, msg, blockNumber)
+	}
+}
+
 // fullMock returns a mockClient with reasonable defaults for sweep tests.
+// The callContractFn automatically handles Multicall3 aggregate3 calls by
+// forwarding ETH-balance sub-calls to the mock's own balanceAtFn, so that
+// tests only need to set balanceAtFn to control what the multicall pre-check
+// sees.
 func fullMock() *mockClient {
-	return &mockClient{
+	m := &mockClient{
 		balanceAtFn: func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 			return big.NewInt(0), nil
 		},
@@ -49,13 +88,38 @@ func fullMock() *mockClient {
 		chainIDFn: func(ctx context.Context) (*big.Int, error) {
 			return big.NewInt(1), nil
 		},
-		callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-			return make([]byte, 32), nil // zero balance
-		},
 		transactionReceiptFn: func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 			return successReceipt(), nil
 		},
 	}
+	// callContractFn is set after m is created so it can close over m to
+	// delegate ETH-balance queries within a multicall to balanceAtFn.
+	m.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			// Use the first wallet's ETH balance as representative for all slots.
+			// Most tests use a single wallet; for multi-wallet tests the specific
+			// balance per address doesn't matter as long as it's consistent.
+			bal, err := m.balanceAtFn(ctx, common.Address{}, nil)
+			if err != nil {
+				// If balanceAtFn errors, return zero so the wallet is skipped by
+				// the multicall pre-filter (HasFunds=false).
+				return multicallZeroResponse(n), nil
+			}
+			return multicallValueResponse(n, bal), nil
+		}
+		return make([]byte, 32), nil // zero ERC20 balance
+	}
+	return m
+}
+
+// multicallCallCount extracts the number of sub-calls from aggregate3 calldata.
+// Layout: 4-byte selector + 32-byte outer offset + 32-byte array length + ...
+func multicallCallCount(data []byte) int {
+	if len(data) < 4+32+32 {
+		return 0
+	}
+	return int(new(big.Int).SetBytes(data[4+32 : 4+32+32]).Uint64())
 }
 
 func TestSweepAll_AllZeroBalances(t *testing.T) {
@@ -124,11 +188,17 @@ func TestSweepAll_ERC20Only(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		tokenBalance.FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, tokenBalance), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			tokenBalance.FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
 		if *tx.To() == token {
 			erc20TxSent = true
@@ -163,11 +233,17 @@ func TestSweepAll_MixedSweep(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		tokenBalance.FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, tokenBalance), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			tokenBalance.FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
 		if *tx.To() == token {
 			erc20Sent = true
@@ -220,11 +296,17 @@ func TestSweepAll_GasFunding(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
 		if tx.To() != nil && *tx.To() == kp.Address {
 			funded = true
@@ -256,11 +338,17 @@ func TestSweepAll_NoGasSource(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 
 	// Without gas source, it will still try to send the ERC20 transfer
 	// (it doesn't check if there's enough gas — the tx will likely fail on-chain)
@@ -355,7 +443,16 @@ func TestSweepAll_ContextCanceled(t *testing.T) {
 
 func TestSweepAll_BalanceError(t *testing.T) {
 	kp := newTestKey(t)
+	ethBalance := big.NewInt(1000000000000000000)
 	mock := fullMock()
+	// Multicall reports ETH balance so sweepKey is entered, then balanceAtFn fails.
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		return nil, errors.New("rpc error")
 	}
@@ -373,6 +470,7 @@ func TestSweepAll_ERC20BalanceError(t *testing.T) {
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		return big.NewInt(1000000000000000000), nil
 	}
+	// Multicall itself fails — this should surface as an error from SweepAll.
 	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 		return nil, errors.New("call error")
 	}
@@ -450,11 +548,17 @@ func TestSweepAll_GasEstimateError(t *testing.T) {
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		return big.NewInt(1000000000000000000), nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return nil, errors.New("gas price error")
 	}
@@ -478,11 +582,17 @@ func TestSweepAll_ERC20SendError(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
 		if tx.To() != nil && *tx.To() == token {
 			return errors.New("send error")
@@ -509,11 +619,17 @@ func TestSweepAll_ERC20ChainIDError(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.chainIDFn = func(ctx context.Context) (*big.Int, error) {
 		return nil, errors.New("chain ID error")
 	}
@@ -537,11 +653,17 @@ func TestSweepAll_ERC20NonceError(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.pendingNonceAtFn = func(ctx context.Context, account common.Address) (uint64, error) {
 		return 0, errors.New("nonce error")
 	}
@@ -562,11 +684,17 @@ func TestSweepAll_ERC20GasPriceError(t *testing.T) {
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		return big.NewInt(1000000000000000000), nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		callCount++
 		if callCount <= 1 {
@@ -595,11 +723,17 @@ func TestSweepAll_ERC20EstimateGasError(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.estimateGasFn = func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 		callCount++
 		if callCount <= 1 {
@@ -627,11 +761,17 @@ func TestSweepAll_ERC20ReceiptError(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.transactionReceiptFn = func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 		return nil, errors.New("receipt error")
 	}
@@ -655,11 +795,17 @@ func TestSweepAll_ERC20FailedReceipt(t *testing.T) {
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
 		return gasPrice, nil
 	}
-	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-		result := make([]byte, 32)
-		big.NewInt(100).FillBytes(result)
-		return result, nil
-	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
 	mock.transactionReceiptFn = func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 		return &types.Receipt{Status: types.ReceiptStatusFailed}, nil
 	}
@@ -821,9 +967,17 @@ func TestSweepAll_ContinuesPastFailures(t *testing.T) {
 	destination := common.HexToAddress("0xdead")
 	ethBalance := big.NewInt(1000000000000000000)
 
-	// kp1 fails balance check, kp2 succeeds and gets swept.
+	// Both wallets have ETH (multicall returns non-zero so sweepKey is called).
+	// kp1 fails the balance re-check inside sweepKey; kp2 succeeds.
 	var kp2Swept bool
 	mock := fullMock()
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		if account == kp1.Address {
 			return nil, errors.New("rpc error")
@@ -859,43 +1013,52 @@ func TestSweepAll_CircuitBreaker(t *testing.T) {
 	kp3 := newTestKey(t)
 	kp3.LineNum = 3
 
-	// All wallets fail balance check.
+	ethBalance := big.NewInt(1000000000000000000)
+
+	// All wallets have ETH (multicall returns non-zero) but fail inside sweepKey.
+	sweepCalls := 0
 	mock := fullMock()
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		sweepCalls++
 		return nil, errors.New("rpc error")
 	}
 
-	balanceCalls := 0
-	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
-		balanceCalls++
-		return nil, errors.New("rpc error")
-	}
-
-	// Circuit breaker at 2 failures — should stop before processing kp3.
+	// Circuit breaker at 2 failures — should stop before processing kp2/kp3.
+	// With maxFailures=2: kp1 eth fails (1), kp1 zksync fails (2) → trips.
 	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 2, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp1, kp2, kp3})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	// With maxFailures=2: kp1 eth fails (1), kp1 zksync fails (2) → trips.
-	// kp2 and kp3 should not be attempted.
-	if balanceCalls != 2 {
-		t.Fatalf("expected 2 balance calls (circuit breaker at 2), got %d", balanceCalls)
+	if sweepCalls != 2 {
+		t.Fatalf("expected 2 sweepKey calls (circuit breaker at 2), got %d", sweepCalls)
 	}
 }
 
 func TestSweepAll_CircuitBreakerMidKey(t *testing.T) {
 	kp1 := newTestKey(t)
 
-	mock := fullMock()
-	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
-		return nil, errors.New("rpc error")
-	}
+	ethBalance := big.NewInt(1000000000000000000)
 
-	// maxFailures=1: ethereum fails → trips immediately, zksync not attempted.
-	balanceCalls := 0
+	// maxFailures=1: ethereum sweepKey fails → trips immediately, zksync not attempted.
+	sweepCalls := 0
+	mock := fullMock()
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
-		balanceCalls++
+		sweepCalls++
 		return nil, errors.New("rpc error")
 	}
 
@@ -904,8 +1067,8 @@ func TestSweepAll_CircuitBreakerMidKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if balanceCalls != 1 {
-		t.Fatalf("expected 1 balance call (circuit breaker at 1), got %d", balanceCalls)
+	if sweepCalls != 1 {
+		t.Fatalf("expected 1 sweepKey call (circuit breaker at 1), got %d", sweepCalls)
 	}
 }
 
@@ -913,7 +1076,15 @@ func TestSweepAll_FailureIncludesLineNum(t *testing.T) {
 	kp := newTestKey(t)
 	kp.LineNum = 42
 
+	ethBalance := big.NewInt(1000000000000000000)
 	mock := fullMock()
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 		return nil, errors.New("rpc error")
 	}
@@ -933,10 +1104,18 @@ func TestSweepAll_UnlimitedFailures(t *testing.T) {
 		keys[i].LineNum = i + 1
 	}
 
-	balanceCalls := 0
+	ethBalance := big.NewInt(1000000000000000000)
+	sweepCalls := 0
 	mock := fullMock()
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		if msg.To != nil && *msg.To == multicall3Address {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, ethBalance), nil
+		}
+		return make([]byte, 32), nil
+	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
-		balanceCalls++
+		sweepCalls++
 		return nil, errors.New("rpc error")
 	}
 
@@ -945,8 +1124,8 @@ func TestSweepAll_UnlimitedFailures(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	// Each key tried on both networks = 20 balance calls.
-	if balanceCalls != 20 {
-		t.Fatalf("expected 20 balance calls (all keys, both networks), got %d", balanceCalls)
+	// Each key has ETH (per multicall) and is attempted on both networks = 20 sweepKey calls.
+	if sweepCalls != 20 {
+		t.Fatalf("expected 20 sweepKey calls (all keys, both networks), got %d", sweepCalls)
 	}
 }
