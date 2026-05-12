@@ -20,7 +20,7 @@ var multicall3Address = common.HexToAddress("0xcA11bde05977b3631167028862bE2a173
 var aggregate3MethodID = [4]byte{0x82, 0xad, 0x56, 0xcb}
 
 // multicallBatchSize is the number of individual calls packed into one eth_call.
-// Kept at 100 to stay within Infura's eth_call sub-call limits on standard tiers.
+// Kept at 100 to stay within RPC provider eth_call sub-call limits.
 const multicallBatchSize = 100
 
 // WalletBalances holds the ETH and ERC20 balances for a single wallet returned
@@ -220,8 +220,8 @@ func encodeAggregate3(calls []callDesc) ([]byte, error) {
 	for i, ec := range encoded {
 		// target
 		buf = append(buf, ec.target[:]...)
-		// allowFailure = false
-		buf = appendUint256(buf, 0)
+		// allowFailure = true — individual sub-call failures return zero rather than reverting the batch
+		buf = appendUint256(buf, 1)
 		// offset to callData bytes, relative to start of this tuple
 		buf = appendUint256(buf, offsets[i])
 
