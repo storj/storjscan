@@ -125,8 +125,8 @@ func MulticallBalances(ctx context.Context, logger *slog.Logger, client Blockcha
 }
 
 // callAggregate3 encodes and executes a single aggregate3 call, returning the
-// raw 32-byte return data for each sub-call (only successful ones are expected;
-// allowFailure is false for all).
+// raw 32-byte return data for each sub-call. allowFailure is true for all
+// sub-calls; failed ones are decoded as zero by decodeAggregate3Results.
 func callAggregate3(ctx context.Context, client BlockchainClient, calls []callDesc) ([][]byte, error) {
 	calldata, err := encodeAggregate3(calls)
 	if err != nil {
