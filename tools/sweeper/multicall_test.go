@@ -25,14 +25,14 @@ import (
 //
 //	32             outer offset (0x20)
 //	32             array length n
-//	n×32           per-element offset table (offsets relative to start of array content)
+//	n×32           per-element offset table (offsets relative to start of offset table)
 //	n × (32+32+32+32)  element bodies: success + bytesRelOff(0x40) + bytesLen(32) + 32-byte value
 func encodeAggregate3Response(vals []*big.Int) []byte {
 	n := len(vals)
 
 	// Each element body is 4×32 = 128 bytes.
 	// Per-element offset table is n×32 bytes.
-	// Element i starts at: n*32 (table) + i*128 (preceding bodies), relative to arrayContent.
+	// Element i starts at: n*32 (table) + i*128 (preceding bodies), relative to offsetTableBase.
 	buf := make([]byte, 0, 32+32+n*32+n*128)
 
 	buf = appendUint256(buf, 0x20) // outer offset

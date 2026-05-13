@@ -225,7 +225,7 @@ func encodeAggregate3(calls []callDesc) ([]byte, error) {
 //
 //	[0]   outer offset (0x20) → array content starts at [32]
 //	[32]  array length n
-//	[64]  n × per-element offset words (relative to start of array content, i.e. [32])
+//	[64]  n × per-element offset words (relative to start of offset table, i.e. [64])
 //	      each offset points to the element encoding:
 //	        success (32 bytes)
 //	        offset to returnData bytes relative to start of element (32 bytes, always 0x40)
