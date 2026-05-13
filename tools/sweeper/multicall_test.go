@@ -208,6 +208,38 @@ func TestMulticallBalances_Empty(t *testing.T) {
 	}
 }
 
+func TestMulticallBalances_DustFilter(t *testing.T) {
+	wallet := common.HexToAddress("0x1111")
+	minETH := big.NewInt(21000) // dust threshold
+
+	tests := []struct {
+		name      string
+		balance   *big.Int
+		wantFunds bool
+	}{
+		{"below dust", big.NewInt(20999), false},
+		{"at dust", big.NewInt(21000), false},
+		{"above dust", big.NewInt(21001), true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &mockClient{
+				callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+					return encodeAggregate3Response([]*big.Int{tc.balance}), nil
+				},
+			}
+			results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, minETH)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if results[0].HasFunds() != tc.wantFunds {
+				t.Fatalf("HasFunds()=%v, want %v (balance=%s, minETH=%s)", results[0].HasFunds(), tc.wantFunds, tc.balance, minETH)
+			}
+		})
+	}
+}
+
 func TestMulticallBalances_RPCError(t *testing.T) {
 	wallet := common.HexToAddress("0x1111")
 

@@ -236,13 +236,19 @@ func decodeAggregate3Results(data []byte, n int) ([][]byte, error) {
 		return nil, fmt.Errorf("response too short: %d bytes", len(data))
 	}
 
-	arrayStart := int(new(big.Int).SetBytes(safeSlice(data, 0, 32)).Uint64())
+	arrayStart, err := decodeOffset(data, 0, "array start")
+	if err != nil {
+		return nil, err
+	}
 	if arrayStart+32 > len(data) {
 		return nil, fmt.Errorf("array start out of bounds")
 	}
 	// arrayContent is where the length word + offset table live; offsets are relative to it.
 	arrayContent := arrayStart
-	arrayLen := int(new(big.Int).SetBytes(safeSlice(data, arrayContent, arrayContent+32)).Uint64())
+	arrayLen, err := decodeOffset(data, arrayContent, "array length")
+	if err != nil {
+		return nil, err
+	}
 	if arrayLen != n {
 		return nil, fmt.Errorf("unexpected result count: got %d, want %d", arrayLen, n)
 	}
@@ -258,7 +264,10 @@ func decodeAggregate3Results(data []byte, n int) ([][]byte, error) {
 		if offWord+32 > len(data) {
 			return nil, fmt.Errorf("element %d offset word out of bounds", i)
 		}
-		elemRelOff := int(new(big.Int).SetBytes(safeSlice(data, offWord, offWord+32)).Uint64())
+		elemRelOff, err := decodeOffset(data, offWord, fmt.Sprintf("element %d offset", i))
+		if err != nil {
+			return nil, err
+		}
 		elemStart := offsetTableBase + elemRelOff
 
 		// Element layout: success(32) + bytesOffset(32) + bytesLen(32) + bytes
@@ -268,13 +277,19 @@ func decodeAggregate3Results(data []byte, n int) ([][]byte, error) {
 		success := data[elemStart+31] != 0
 
 		// offset to returnData bytes, relative to start of this element
-		bytesRelOff := int(new(big.Int).SetBytes(safeSlice(data, elemStart+32, elemStart+64)).Uint64())
+		bytesRelOff, err := decodeOffset(data, elemStart+32, fmt.Sprintf("element %d bytes offset", i))
+		if err != nil {
+			return nil, err
+		}
 		bytesLenOff := elemStart + bytesRelOff
 		if bytesLenOff+32 > len(data) {
 			return nil, fmt.Errorf("element %d data offset out of bounds", i)
 		}
 
-		bytesLen := int(new(big.Int).SetBytes(safeSlice(data, bytesLenOff, bytesLenOff+32)).Uint64())
+		bytesLen, err := decodeOffset(data, bytesLenOff, fmt.Sprintf("element %d bytes length", i))
+		if err != nil {
+			return nil, err
+		}
 		if bytesLenOff+32+bytesLen > len(data) {
 			return nil, fmt.Errorf("element %d data out of bounds", i)
 		}
@@ -314,6 +329,17 @@ func appendUint256(buf []byte, v uint64) []byte {
 	var word [32]byte
 	binary.BigEndian.PutUint64(word[24:], v)
 	return append(buf, word[:]...)
+}
+
+// decodeOffset reads a 32-byte ABI word from data[off:off+32] and returns it
+// as a non-negative int. Returns an error if the value exceeds the length of
+// data, guarding against malformed responses causing negative slice indices.
+func decodeOffset(data []byte, off int, label string) (int, error) {
+	raw := new(big.Int).SetBytes(safeSlice(data, off, off+32))
+	if !raw.IsInt64() || raw.Int64() < 0 || raw.Int64() > int64(len(data)) {
+		return 0, fmt.Errorf("%s out of range: %s", label, raw)
+	}
+	return int(raw.Int64()), nil
 }
 
 func safeSlice(data []byte, from, to int) []byte {

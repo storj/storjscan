@@ -61,7 +61,10 @@ func retry[T any](ctx context.Context, r *RetryClient, op string, level slog.Lev
 	return backoff.Retry(ctx, func() (T, error) {
 		result, err := fn()
 		if err != nil {
-			r.logger.Log(ctx, level, "retrying RPC call", "op", op, "error", err)
+			var permErr *backoff.PermanentError
+			if !errors.As(err, &permErr) {
+				r.logger.Log(ctx, level, "retrying RPC call", "op", op, "error", err)
+			}
 			return result, err
 		}
 		return result, nil
@@ -109,7 +112,8 @@ func (r *RetryClient) CallContract(ctx context.Context, msg ethereum.CallMsg, bl
 	return retry(ctx, r, "CallContract", slog.LevelWarn, func() ([]byte, error) {
 		result, err := r.client.CallContract(ctx, msg, blockNumber)
 		if err != nil {
-			// Contract reverts (code 3) are deterministic — retrying won't help.
+			// Contract reverts (code 3) are deterministic — wrap as permanent so
+			// the retry loop exits immediately without logging a spurious retry.
 			var rpcErr rpc.Error
 			if errors.As(err, &rpcErr) && rpcErr.ErrorCode() == 3 {
 				return nil, backoff.Permanent(err)
