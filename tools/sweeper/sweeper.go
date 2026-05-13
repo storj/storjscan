@@ -67,6 +67,9 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if len(keys) == 0 {
+		return nil
+	}
 
 	addrs := make([]common.Address, len(keys))
 	for i, kp := range keys {
@@ -359,9 +362,8 @@ func logBalanceSummary(logger *slog.Logger, network string, balances []WalletBal
 			}
 		}
 	}
-	args := []any{"network", network, "ETH_wallets", ethCount, "ETH_total", ethTotal.String()}
+	logger.Info("balance check complete", "network", network, "ETH_wallets", ethCount, "ETH_total", ethTotal.String())
 	for i, token := range tokens {
-		args = append(args, token.Hex()+"_wallets", tokenCounts[i], token.Hex()+"_total", tokenTotals[i].String())
+		logger.Info("token balance summary", "network", network, "token", token.Hex(), "wallets", tokenCounts[i], "total", tokenTotals[i].String())
 	}
-	logger.Info("balance check complete", args...)
 }

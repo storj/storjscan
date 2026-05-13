@@ -279,6 +279,10 @@ func decodeAggregate3Results(data []byte, n int) ([][]byte, error) {
 		payload := data[bytesLenOff+32 : bytesLenOff+32+bytesLen]
 
 		if !success || len(payload) < 32 {
+			// Sub-call failed (allowFailure=true) or returned no data — treat as
+			// zero balance. Token addresses are operator-configured, so a reverting
+			// balanceOf most likely means the contract isn't a standard ERC20 at
+			// that address on this network, not that the wallet has funds we'd miss.
 			results[i] = make([]byte, 32)
 		} else {
 			results[i] = payload[len(payload)-32:]

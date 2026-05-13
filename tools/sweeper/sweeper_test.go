@@ -100,8 +100,8 @@ func fullMock() *mockClient {
 			// balance per address doesn't matter as long as it's consistent.
 			bal, err := m.balanceAtFn(ctx, common.Address{}, nil)
 			if err != nil {
-				// If balanceAtFn errors, return zero so sweepKey is not called
-				// and the error surfaces there instead.
+				// If balanceAtFn errors, return zero so the wallet is skipped by
+				// the multicall pre-filter (HasFunds=false).
 				return multicallZeroResponse(n), nil
 			}
 			return multicallValueResponse(n, bal), nil

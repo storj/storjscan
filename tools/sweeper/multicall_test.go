@@ -57,7 +57,7 @@ func encodeAggregate3Response(vals []*big.Int) []byte {
 
 func TestMulticallBalances_AllZero(t *testing.T) {
 	wallet := common.HexToAddress("0x1111")
-	token := common.HexToAddress("0xtoken")
+	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
 
 	mock := &mockClient{
 		callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
@@ -101,7 +101,7 @@ func TestMulticallBalances_ETHNonZero(t *testing.T) {
 
 func TestMulticallBalances_TokenNonZero(t *testing.T) {
 	wallet := common.HexToAddress("0x1111")
-	token := common.HexToAddress("0xtoken")
+	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
 
 	mock := &mockClient{
 		callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
