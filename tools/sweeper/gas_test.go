@@ -81,6 +81,22 @@ func TestEstimateSweepGas_GasPriceError(t *testing.T) {
 	}
 }
 
+func TestEstimateSweepGas_GasTipCapError(t *testing.T) {
+	mock := &mockClient{
+		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
+			return big.NewInt(1), nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return nil, errors.New("tip cap error")
+		},
+	}
+
+	_, err := EstimateSweepGas(context.Background(), mock, common.Address{}, common.Address{}, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestEstimateSweepGas_EstimateGasError(t *testing.T) {
 	mock := &mockClient{
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
@@ -106,6 +122,8 @@ func TestFundWallet_Success(t *testing.T) {
 	}
 	target := common.HexToAddress("0xaaaa")
 	amount := big.NewInt(1000000)
+	gasFeeCap := big.NewInt(20000000000) // 20 gwei
+	gasTipCap := big.NewInt(1500000000)  // 1.5 gwei
 
 	fundGas := uint64(21000)
 	var sentTx *types.Transaction
@@ -117,7 +135,10 @@ func TestFundWallet_Success(t *testing.T) {
 			return 5, nil
 		},
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
-			return big.NewInt(20000000000), nil
+			return gasFeeCap, nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return gasTipCap, nil
 		},
 		estimateGasFn: func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 			return fundGas, nil
@@ -139,6 +160,9 @@ func TestFundWallet_Success(t *testing.T) {
 	if sentTx == nil {
 		t.Fatal("no transaction sent")
 	}
+	if sentTx.Type() != types.DynamicFeeTxType {
+		t.Fatalf("expected DynamicFeeTx (type 2), got type %d", sentTx.Type())
+	}
 	if sentTx.Nonce() != 5 {
 		t.Fatalf("expected nonce 5, got %d", sentTx.Nonce())
 	}
@@ -147,6 +171,12 @@ func TestFundWallet_Success(t *testing.T) {
 	}
 	if sentTx.Gas() != fundGas {
 		t.Fatalf("expected gas %d, got %d", fundGas, sentTx.Gas())
+	}
+	if sentTx.GasFeeCap().Cmp(gasFeeCap) != 0 {
+		t.Fatalf("expected GasFeeCap %s, got %s", gasFeeCap.String(), sentTx.GasFeeCap().String())
+	}
+	if sentTx.GasTipCap().Cmp(gasTipCap) != 0 {
+		t.Fatalf("expected GasTipCap %s, got %s", gasTipCap.String(), sentTx.GasTipCap().String())
 	}
 }
 
@@ -198,6 +228,31 @@ func TestFundWallet_GasPriceError(t *testing.T) {
 		},
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
 			return nil, errors.New("gas price error")
+		},
+	}
+
+	err := FundWallet(context.Background(), mock, gasSource, common.Address{}, big.NewInt(1))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestFundWallet_GasTipCapError(t *testing.T) {
+	pk, _ := crypto.GenerateKey()
+	gasSource := &KeyPair{PrivateKey: pk, Address: crypto.PubkeyToAddress(pk.PublicKey)}
+
+	mock := &mockClient{
+		chainIDFn: func(ctx context.Context) (*big.Int, error) {
+			return big.NewInt(1), nil
+		},
+		pendingNonceAtFn: func(ctx context.Context, account common.Address) (uint64, error) {
+			return 0, nil
+		},
+		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
+			return big.NewInt(1), nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return nil, errors.New("tip cap error")
 		},
 	}
 

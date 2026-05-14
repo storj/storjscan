@@ -222,9 +222,9 @@ func (s *Sweeper) sweepKey(ctx context.Context, kp KeyPair, client BlockchainCli
 		return fmt.Errorf("final balance check: %w", err)
 	}
 
-	gasPrice, err := client.SuggestGasPrice(ctx)
+	gasFeeCap, gasTipCap, err := suggestGasFees(ctx, client)
 	if err != nil {
-		return fmt.Errorf("gas price for ETH sweep: %w", err)
+		return fmt.Errorf("gas fees for ETH sweep: %w", err)
 	}
 	dest := s.destination
 	ethGasLimit, err := client.EstimateGas(ctx, ethereum.CallMsg{
@@ -235,13 +235,13 @@ func (s *Sweeper) sweepKey(ctx context.Context, kp KeyPair, client BlockchainCli
 	if err != nil {
 		return fmt.Errorf("estimate gas for ETH sweep: %w", err)
 	}
-	ethTransferCost := new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(ethGasLimit))
+	ethTransferCost := new(big.Int).Mul(gasFeeCap, new(big.Int).SetUint64(ethGasLimit))
 
 	if ethBalance.Cmp(ethTransferCost) > 0 {
 		sweepAmount := new(big.Int).Sub(ethBalance, ethTransferCost)
 		s.logger.Info("sweeping ETH", "network", network, "address", kp.Address.Hex(), "amount", sweepAmount.String(), "destination", s.destination.Hex())
 
-		if err := s.sendETHTransfer(ctx, client, kp, sweepAmount, ethGasLimit, gasPrice); err != nil {
+		if err := s.sendETHTransfer(ctx, client, kp, sweepAmount, ethGasLimit, gasFeeCap, gasTipCap); err != nil {
 			return fmt.Errorf("sweep ETH: %w", err)
 		}
 	} else {
@@ -262,9 +262,9 @@ func (s *Sweeper) sendERC20Transfer(ctx context.Context, client BlockchainClient
 		return fmt.Errorf("nonce: %w", err)
 	}
 
-	gasPrice, err := client.SuggestGasPrice(ctx)
+	gasFeeCap, gasTipCap, err := suggestGasFees(ctx, client)
 	if err != nil {
-		return fmt.Errorf("gas price: %w", err)
+		return err
 	}
 
 	data := ERC20TransferData(s.destination, amount)
@@ -277,8 +277,16 @@ func (s *Sweeper) sendERC20Transfer(ctx context.Context, client BlockchainClient
 		return fmt.Errorf("estimate gas: %w", err)
 	}
 
-	tx := types.NewTransaction(nonce, token, big.NewInt(0), gasLimit, gasPrice, data)
-	signer := types.NewEIP155Signer(chainID)
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &token,
+		Gas:       gasLimit,
+		GasFeeCap: gasFeeCap,
+		GasTipCap: gasTipCap,
+		Data:      data,
+	})
+	signer := types.LatestSignerForChainID(chainID)
 	signedTx, err := types.SignTx(tx, signer, kp.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("sign: %w", err)
@@ -299,11 +307,11 @@ func (s *Sweeper) sendERC20Transfer(ctx context.Context, client BlockchainClient
 	return nil
 }
 
-// sendETHTransfer sends an ETH transfer using the gasLimit and gasPrice already
-// computed by the caller, ensuring the sweep amount and transaction fee are
-// consistent (no re-estimation that could cause "insufficient funds" if the
-// gas price ticks up between the two calls).
-func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, kp KeyPair, amount *big.Int, gasLimit uint64, gasPrice *big.Int) error {
+// sendETHTransfer sends an ETH transfer using the gasLimit, gasFeeCap, and
+// gasTipCap already computed by the caller, ensuring the sweep amount and
+// transaction fee are consistent (no re-estimation that could cause
+// "insufficient funds" if the base fee ticks up between the two calls).
+func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, kp KeyPair, amount *big.Int, gasLimit uint64, gasFeeCap, gasTipCap *big.Int) error {
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
 		return fmt.Errorf("chain ID: %w", err)
@@ -314,8 +322,17 @@ func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, 
 		return fmt.Errorf("nonce: %w", err)
 	}
 
-	tx := types.NewTransaction(nonce, s.destination, amount, gasLimit, gasPrice, nil)
-	signer := types.NewEIP155Signer(chainID)
+	dest := s.destination
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &dest,
+		Value:     amount,
+		Gas:       gasLimit,
+		GasFeeCap: gasFeeCap,
+		GasTipCap: gasTipCap,
+	})
+	signer := types.LatestSignerForChainID(chainID)
 	signedTx, err := types.SignTx(tx, signer, kp.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("sign: %w", err)
@@ -339,11 +356,11 @@ func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, 
 func (s *Sweeper) queryBalances(ctx context.Context, client BlockchainClient, addrs []common.Address, tokens []common.Address, network string) ([]WalletBalances, error) {
 	var minETH *big.Int
 	if !s.skipETH {
-		gasPrice, err := client.SuggestGasPrice(ctx)
+		gasFeeCap, _, err := suggestGasFees(ctx, client)
 		if err != nil {
-			return nil, fmt.Errorf("%s gas price: %w", network, err)
+			return nil, fmt.Errorf("%s gas fees: %w", network, err)
 		}
-		minETH = new(big.Int).Mul(gasPrice, big.NewInt(21000))
+		minETH = new(big.Int).Mul(gasFeeCap, big.NewInt(21000))
 	}
 
 	s.logger.Info("querying balances via multicall", "network", network, "wallets", len(addrs))

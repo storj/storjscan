@@ -12,12 +12,27 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// suggestGasFees fetches the EIP-1559 gas fee cap and tip cap from the network.
+// gasFeeCap is the value returned by SuggestGasPrice (which on EIP-1559 networks
+// returns baseFee*2 + tip, a safe upper bound). gasTipCap is the priority fee.
+func suggestGasFees(ctx context.Context, client BlockchainClient) (gasFeeCap, gasTipCap *big.Int, err error) {
+	gasFeeCap, err = client.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("suggest gas price: %w", err)
+	}
+	gasTipCap, err = client.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("suggest gas tip cap: %w", err)
+	}
+	return gasFeeCap, gasTipCap, nil
+}
+
 // EstimateSweepGas estimates the total gas cost in wei for sweeping all tokens
 // and ETH from a wallet. It includes a 30% buffer on top of the estimated cost.
 func EstimateSweepGas(ctx context.Context, client BlockchainClient, from common.Address, destination common.Address, tokens []common.Address) (*big.Int, error) {
-	gasPrice, err := client.SuggestGasPrice(ctx)
+	gasFeeCap, _, err := suggestGasFees(ctx, client)
 	if err != nil {
-		return nil, fmt.Errorf("suggest gas price: %w", err)
+		return nil, err
 	}
 
 	var totalGas uint64
@@ -36,8 +51,8 @@ func EstimateSweepGas(ctx context.Context, client BlockchainClient, from common.
 		totalGas += gas
 	}
 
-	// Total cost = totalGas * gasPrice
-	cost := new(big.Int).Mul(new(big.Int).SetUint64(totalGas), gasPrice)
+	// Total cost = totalGas * gasFeeCap
+	cost := new(big.Int).Mul(new(big.Int).SetUint64(totalGas), gasFeeCap)
 
 	// Add 30% buffer: cost = cost * 130 / 100
 	cost.Mul(cost, big.NewInt(130))
@@ -59,9 +74,9 @@ func FundWallet(ctx context.Context, client BlockchainClient, gasSource *KeyPair
 		return fmt.Errorf("pending nonce: %w", err)
 	}
 
-	gasPrice, err := client.SuggestGasPrice(ctx)
+	gasFeeCap, gasTipCap, err := suggestGasFees(ctx, client)
 	if err != nil {
-		return fmt.Errorf("suggest gas price: %w", err)
+		return err
 	}
 
 	gasLimit, err := client.EstimateGas(ctx, ethereum.CallMsg{
@@ -73,8 +88,16 @@ func FundWallet(ctx context.Context, client BlockchainClient, gasSource *KeyPair
 		return fmt.Errorf("estimate gas for funding: %w", err)
 	}
 
-	tx := types.NewTransaction(nonce, target, amount, gasLimit, gasPrice, nil)
-	signer := types.NewEIP155Signer(chainID)
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &target,
+		Value:     amount,
+		Gas:       gasLimit,
+		GasFeeCap: gasFeeCap,
+		GasTipCap: gasTipCap,
+	})
+	signer := types.LatestSignerForChainID(chainID)
 	signedTx, err := types.SignTx(tx, signer, gasSource.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("sign transaction: %w", err)

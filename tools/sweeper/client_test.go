@@ -20,6 +20,7 @@ type mockClient struct {
 	balanceAtFn          func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
 	pendingNonceAtFn     func(ctx context.Context, account common.Address) (uint64, error)
 	suggestGasPriceFn    func(ctx context.Context) (*big.Int, error)
+	suggestGasTipCapFn   func(ctx context.Context) (*big.Int, error)
 	estimateGasFn        func(ctx context.Context, msg ethereum.CallMsg) (uint64, error)
 	sendTransactionFn    func(ctx context.Context, tx *types.Transaction) error
 	chainIDFn            func(ctx context.Context) (*big.Int, error)
@@ -37,6 +38,13 @@ func (m *mockClient) PendingNonceAt(ctx context.Context, account common.Address)
 
 func (m *mockClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
 	return m.suggestGasPriceFn(ctx)
+}
+
+func (m *mockClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	if m.suggestGasTipCapFn != nil {
+		return m.suggestGasTipCapFn(ctx)
+	}
+	return big.NewInt(1e9), nil // default: 1 gwei tip
 }
 
 func (m *mockClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {

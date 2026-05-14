@@ -1188,3 +1188,164 @@ func TestNewSweeper_SkipETH(t *testing.T) {
 		t.Fatal("skipETH not set")
 	}
 }
+
+func TestSweepAll_ETHTransferIsDynamicFeeTx(t *testing.T) {
+	kp := newTestKey(t)
+	destination := common.HexToAddress("0xdead")
+	gasFeeCap := big.NewInt(20000000000) // 20 gwei
+	gasTipCap := big.NewInt(1500000000)  // 1.5 gwei
+	ethBalance := big.NewInt(1000000000000000000)
+
+	var sentTx *types.Transaction
+	mock := fullMock()
+	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		return ethBalance, nil
+	}
+	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
+		return gasFeeCap, nil
+	}
+	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
+		return gasTipCap, nil
+	}
+	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
+		sentTx = tx
+		return nil
+	}
+
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	err := sw.SweepAll(context.Background(), []KeyPair{kp})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sentTx == nil {
+		t.Fatal("no transaction sent")
+	}
+	if sentTx.Type() != types.DynamicFeeTxType {
+		t.Fatalf("expected DynamicFeeTx (type 2), got type %d", sentTx.Type())
+	}
+	if sentTx.GasFeeCap().Cmp(gasFeeCap) != 0 {
+		t.Fatalf("expected GasFeeCap %s, got %s", gasFeeCap.String(), sentTx.GasFeeCap().String())
+	}
+	if sentTx.GasTipCap().Cmp(gasTipCap) != 0 {
+		t.Fatalf("expected GasTipCap %s, got %s", gasTipCap.String(), sentTx.GasTipCap().String())
+	}
+}
+
+func TestSweepAll_ERC20TransferIsDynamicFeeTx(t *testing.T) {
+	kp := newTestKey(t)
+	destination := common.HexToAddress("0xdead")
+	token := common.HexToAddress("0xtoken")
+	gasFeeCap := big.NewInt(20000000000)
+	gasTipCap := big.NewInt(1500000000)
+	tokenBalance := big.NewInt(5000000)
+	ethBalance := big.NewInt(1000000000000000000)
+
+	var erc20Tx *types.Transaction
+	mock := fullMock()
+	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		return ethBalance, nil
+	}
+	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
+		return gasFeeCap, nil
+	}
+	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
+		return gasTipCap, nil
+	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, tokenBalance), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			tokenBalance.FillBytes(result)
+			return result, nil
+		},
+	)
+	mock.sendTransactionFn = func(ctx context.Context, tx *types.Transaction) error {
+		if tx.To() != nil && *tx.To() == token {
+			erc20Tx = tx
+		}
+		return nil
+	}
+
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	err := sw.SweepAll(context.Background(), []KeyPair{kp})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if erc20Tx == nil {
+		t.Fatal("no ERC20 transaction sent")
+	}
+	if erc20Tx.Type() != types.DynamicFeeTxType {
+		t.Fatalf("expected DynamicFeeTx (type 2), got type %d", erc20Tx.Type())
+	}
+	if erc20Tx.GasFeeCap().Cmp(gasFeeCap) != 0 {
+		t.Fatalf("expected GasFeeCap %s, got %s", gasFeeCap.String(), erc20Tx.GasFeeCap().String())
+	}
+	if erc20Tx.GasTipCap().Cmp(gasTipCap) != 0 {
+		t.Fatalf("expected GasTipCap %s, got %s", gasTipCap.String(), erc20Tx.GasTipCap().String())
+	}
+}
+
+func TestSweepAll_ERC20GasTipCapError(t *testing.T) {
+	kp := newTestKey(t)
+	token := common.HexToAddress("0xtoken")
+
+	callCount := 0
+	mock := fullMock()
+	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		return big.NewInt(1000000000000000000), nil
+	}
+	mock.callContractFn = mockCallContract(
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			n := multicallCallCount(msg.Data)
+			return multicallValueResponse(n, big.NewInt(100)), nil
+		},
+		func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			result := make([]byte, 32)
+			big.NewInt(100).FillBytes(result)
+			return result, nil
+		},
+	)
+	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
+		callCount++
+		if callCount <= 3 {
+			// queryBalances calls suggestGasFees once per network (eth+zk = 2 calls),
+			// then EstimateSweepGas calls it once more — allow those through.
+			return big.NewInt(1e9), nil
+		}
+		return nil, errors.New("tip cap error") // call in sendERC20Transfer
+	}
+
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	err := sw.SweepAll(context.Background(), []KeyPair{kp})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestSweepAll_ETHGasTipCapError(t *testing.T) {
+	kp := newTestKey(t)
+
+	callCount := 0
+	mock := fullMock()
+	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		return big.NewInt(1000000000000000000), nil
+	}
+	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
+		callCount++
+		if callCount <= 2 {
+			// queryBalances calls suggestGasFees once per network (eth+zk = 2 calls)
+			// before sweepKey is entered.
+			return big.NewInt(1e9), nil
+		}
+		return nil, errors.New("tip cap error") // call in sweepKey ETH path
+	}
+
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	err := sw.SweepAll(context.Background(), []KeyPair{kp})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

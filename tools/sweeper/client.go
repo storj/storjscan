@@ -21,6 +21,7 @@ type BlockchainClient interface {
 	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
 	PendingNonceAt(ctx context.Context, account common.Address) (uint64, error)
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)
+	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
 	EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error)
 	SendTransaction(ctx context.Context, tx *types.Transaction) error
 	ChainID(ctx context.Context) (*big.Int, error)
@@ -86,6 +87,12 @@ func (r *RetryClient) PendingNonceAt(ctx context.Context, account common.Address
 func (r *RetryClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
 	return retry(ctx, r, "SuggestGasPrice", slog.LevelWarn, func() (*big.Int, error) {
 		return r.client.SuggestGasPrice(ctx)
+	})
+}
+
+func (r *RetryClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	return retry(ctx, r, "SuggestGasTipCap", slog.LevelWarn, func() (*big.Int, error) {
+		return r.client.SuggestGasTipCap(ctx)
 	})
 }
 
