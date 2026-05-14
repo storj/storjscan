@@ -68,7 +68,7 @@ func TestMulticallBalances_AllZero(t *testing.T) {
 		},
 	}
 
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, []common.Address{token}, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, []common.Address{token}, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestMulticallBalances_ETHNonZero(t *testing.T) {
 		},
 	}
 
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestMulticallBalances_TokenNonZero(t *testing.T) {
 		},
 	}
 
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, []common.Address{token}, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, []common.Address{token}, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestMulticallBalances_MultipleWallets(t *testing.T) {
 		},
 	}
 
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, wallets, nil, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, wallets, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestMulticallBalances_Batching(t *testing.T) {
 		},
 	}
 
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, wallets, nil, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, wallets, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestMulticallBalances_Batching(t *testing.T) {
 
 func TestMulticallBalances_Empty(t *testing.T) {
 	mock := &mockClient{}
-	results, err := MulticallBalances(context.Background(), testLogger(), mock, nil, nil, nil)
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, nil, nil, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestMulticallBalances_DustFilter(t *testing.T) {
 					return encodeAggregate3Response([]*big.Int{tc.balance}), nil
 				},
 			}
-			results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, minETH)
+			results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, minETH, false)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -249,9 +249,38 @@ func TestMulticallBalances_RPCError(t *testing.T) {
 		},
 	}
 
-	_, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, nil)
+	_, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, nil, nil, false)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestMulticallBalances_SkipETH(t *testing.T) {
+	wallet := common.HexToAddress("0x1111")
+	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	tokenBalance := big.NewInt(500)
+
+	var callCount int
+	mock := &mockClient{
+		callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			callCount++
+			// With skipETH=true and 1 token, there should be exactly 1 call per wallet.
+			return encodeAggregate3Response([]*big.Int{tokenBalance}), nil
+		},
+	}
+
+	results, err := MulticallBalances(context.Background(), testLogger(), mock, []common.Address{wallet}, []common.Address{token}, nil, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if results[0].ETH.Sign() != 0 {
+		t.Fatalf("expected ETH balance to be zero when skipETH=true, got %v", results[0].ETH)
+	}
+	if results[0].Tokens[0].Cmp(tokenBalance) != 0 {
+		t.Fatalf("unexpected token balance: %v", results[0].Tokens[0])
+	}
+	if !results[0].HasFunds() {
+		t.Fatal("expected HasFunds() true due to token balance")
 	}
 }
 
@@ -276,7 +305,7 @@ func TestSweepAll_SkipsEmptyWalletsViaMulticall(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, testLogger())
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, testLogger())
 	if err := sw.SweepAll(context.Background(), []KeyPair{kp}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

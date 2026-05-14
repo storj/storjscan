@@ -33,6 +33,7 @@ type Sweeper struct {
 	gasSource   *KeyPair
 	rateDelay   time.Duration
 	maxFailures int
+	skipETH     bool
 	logger      *slog.Logger
 }
 
@@ -46,6 +47,7 @@ func NewSweeper(
 	gasSource *KeyPair,
 	rateDelay time.Duration,
 	maxFailures int,
+	skipETH bool,
 	logger *slog.Logger,
 ) *Sweeper {
 	return &Sweeper{
@@ -57,6 +59,7 @@ func NewSweeper(
 		gasSource:   gasSource,
 		rateDelay:   rateDelay,
 		maxFailures: maxFailures,
+		skipETH:     skipETH,
 		logger:      logger,
 	}
 }
@@ -207,6 +210,11 @@ func (s *Sweeper) sweepKey(ctx context.Context, kp KeyPair, client BlockchainCli
 		}
 	}
 
+	if s.skipETH {
+		s.logger.Info("skipping ETH sweep", "network", network, "address", kp.Address.Hex())
+		return nil
+	}
+
 	// Sweep remaining ETH
 	// Re-check balance since gas was spent on token transfers
 	ethBalance, err = client.BalanceAt(ctx, kp.Address, nil)
@@ -329,14 +337,17 @@ func (s *Sweeper) sendETHTransfer(ctx context.Context, client BlockchainClient, 
 }
 
 func (s *Sweeper) queryBalances(ctx context.Context, client BlockchainClient, addrs []common.Address, tokens []common.Address, network string) ([]WalletBalances, error) {
-	gasPrice, err := client.SuggestGasPrice(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("%s gas price: %w", network, err)
+	var minETH *big.Int
+	if !s.skipETH {
+		gasPrice, err := client.SuggestGasPrice(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("%s gas price: %w", network, err)
+		}
+		minETH = new(big.Int).Mul(gasPrice, big.NewInt(21000))
 	}
-	minETH := new(big.Int).Mul(gasPrice, big.NewInt(21000))
 
 	s.logger.Info("querying balances via multicall", "network", network, "wallets", len(addrs))
-	balances, err := MulticallBalances(ctx, s.logger, client, addrs, tokens, minETH)
+	balances, err := MulticallBalances(ctx, s.logger, client, addrs, tokens, minETH, s.skipETH)
 	if err != nil {
 		return nil, fmt.Errorf("multicall %s balances: %w", network, err)
 	}

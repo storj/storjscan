@@ -55,25 +55,31 @@ type callDesc struct {
 // MulticallBalances queries ETH and ERC20 balances for all wallets in batches
 // using Multicall3. Returns one WalletBalances per entry in wallets, in the
 // same order. ETH balances at or below minETH are treated as dust and zeroed
-// out; pass nil to keep all positive ETH balances.
-func MulticallBalances(ctx context.Context, logger *slog.Logger, client BlockchainClient, wallets []common.Address, tokens []common.Address, minETH *big.Int) ([]WalletBalances, error) {
+// out; pass nil to keep all positive ETH balances. If skipETH is true, the ETH
+// balance query is omitted entirely and WalletBalances.ETH is left as zero.
+func MulticallBalances(ctx context.Context, logger *slog.Logger, client BlockchainClient, wallets []common.Address, tokens []common.Address, minETH *big.Int, skipETH bool) ([]WalletBalances, error) {
 	if len(wallets) == 0 {
 		return nil, nil
 	}
 
-	// Number of calls per wallet: 1 ETH balance + 1 per token.
-	callsPerWallet := 1 + len(tokens)
+	// Number of calls per wallet: 1 ETH balance (unless skipped) + 1 per token.
+	callsPerWallet := len(tokens)
+	if !skipETH {
+		callsPerWallet++
+	}
 	totalCalls := len(wallets) * callsPerWallet
 
 	allCalls := make([]callDesc, 0, totalCalls)
 	for wi, wallet := range wallets {
-		// ETH balance via Multicall3.getEthBalance(address)
-		allCalls = append(allCalls, callDesc{
-			walletIdx: wi,
-			tokenIdx:  -1,
-			target:    multicall3Address,
-			data:      encodeGetEthBalance(wallet),
-		})
+		if !skipETH {
+			// ETH balance via Multicall3.getEthBalance(address)
+			allCalls = append(allCalls, callDesc{
+				walletIdx: wi,
+				tokenIdx:  -1,
+				target:    multicall3Address,
+				data:      encodeGetEthBalance(wallet),
+			})
+		}
 		// ERC20 balanceOf(wallet) for each token
 		for ti, token := range tokens {
 			allCalls = append(allCalls, callDesc{
