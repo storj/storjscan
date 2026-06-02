@@ -30,6 +30,7 @@ func main() {
 	rateDelay := flag.Duration("rate-delay", 200*time.Millisecond, "Delay between RPC calls per key")
 	maxFailures := flag.Int("max-failures", 25, "Maximum number of wallet failures before aborting (0 for unlimited)")
 	skipETH := flag.Bool("skip-eth", false, "Skip sweeping ETH, only sweep ERC20 tokens")
+	dryRun := flag.Bool("dry-run", false, "Print estimated recoverable balances and gas costs without sending any transactions")
 	receiptTimeout := flag.Duration("receipt-timeout", 30*time.Minute, "Maximum time to wait for a transaction to be mined")
 
 	flag.Parse()
@@ -135,7 +136,7 @@ func main() {
 	zkRetry.SetReceiptTimeout(*receiptTimeout)
 
 	// Create and run sweeper.
-	sw := sweeper.NewSweeper(ethRetry, zkRetry, dest, ethTokens, zkTokens, gasSource, *rateDelay, *maxFailures, *skipETH, logger)
+	sw := sweeper.NewSweeper(ethRetry, zkRetry, dest, ethTokens, zkTokens, gasSource, *rateDelay, *maxFailures, *skipETH, *dryRun, logger)
 
 	logger.Info("starting sweep", "keys", len(keys), "ethTokens", len(ethTokens), "zkTokens", len(zkTokens))
 

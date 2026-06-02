@@ -34,6 +34,7 @@ type Sweeper struct {
 	rateDelay   time.Duration
 	maxFailures int
 	skipETH     bool
+	dryRun      bool
 	logger      *slog.Logger
 }
 
@@ -48,6 +49,7 @@ func NewSweeper(
 	rateDelay time.Duration,
 	maxFailures int,
 	skipETH bool,
+	dryRun bool,
 	logger *slog.Logger,
 ) *Sweeper {
 	return &Sweeper{
@@ -60,6 +62,7 @@ func NewSweeper(
 		rateDelay:   rateDelay,
 		maxFailures: maxFailures,
 		skipETH:     skipETH,
+		dryRun:      dryRun,
 		logger:      logger,
 	}
 }
@@ -89,6 +92,10 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 	zkBalances, err := s.queryBalances(ctx, s.zkClient, addrs, s.zkTokens, "zksync")
 	if err != nil {
 		return err
+	}
+
+	if s.dryRun {
+		return s.dryRunReport(ctx, keys, ethBalances, zkBalances)
 	}
 
 	var failures []SweepFailure
@@ -127,6 +134,130 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 		}
 		return fmt.Errorf("%d address(es) failed to sweep", len(failures))
 	}
+	return nil
+}
+
+// dryRunReport prints a summary of what would be swept without sending any transactions.
+// For each wallet with funds it estimates gas costs and logs recoverable balances.
+func (s *Sweeper) dryRunReport(ctx context.Context, keys []KeyPair, ethBalances, zkBalances []WalletBalances) error {
+	type networkConfig struct {
+		name     string
+		client   BlockchainClient
+		tokens   []common.Address
+		balances []WalletBalances
+	}
+	networks := []networkConfig{
+		{"ethereum", s.ethClient, s.ethTokens, ethBalances},
+		{"zksync", s.zkClient, s.zkTokens, zkBalances},
+	}
+
+	for _, net := range networks {
+		totalRecoverableETH := new(big.Int)
+		totalGasCost := new(big.Int)
+		tokenTotals := make([]*big.Int, len(net.tokens))
+		for i := range tokenTotals {
+			tokenTotals[i] = new(big.Int)
+		}
+		walletsWithFunds := 0
+
+		for i, kp := range keys {
+			bal := net.balances[i]
+			if !bal.HasFunds() {
+				continue
+			}
+			walletsWithFunds++
+
+			// Collect non-zero tokens for this wallet.
+			var nonZeroTokens []common.Address
+			for ti, tb := range bal.Tokens {
+				if tb.Sign() > 0 {
+					nonZeroTokens = append(nonZeroTokens, net.tokens[ti])
+					tokenTotals[ti].Add(tokenTotals[ti], tb)
+				}
+			}
+
+			// Estimate gas cost for ERC20 transfers.
+			var walletGasCost *big.Int
+			if len(nonZeroTokens) > 0 {
+				cost, err := EstimateSweepGas(ctx, net.client, kp.Address, s.destination, nonZeroTokens)
+				if err != nil {
+					s.logger.Warn("dry-run: failed to estimate gas", "network", net.name, "address", kp.Address.Hex(), "error", err)
+					continue
+				}
+				walletGasCost = cost
+			} else {
+				walletGasCost = new(big.Int)
+			}
+
+			// Estimate ETH recovery.
+			recoverableETH := new(big.Int)
+			ethTransferGas := new(big.Int)
+			if !s.skipETH && bal.ETH.Sign() > 0 {
+				gasFeeCap, _, err := suggestGasFees(ctx, net.client)
+				if err != nil {
+					s.logger.Warn("dry-run: failed to get gas fees", "network", net.name, "address", kp.Address.Hex(), "error", err)
+					continue
+				}
+				// ETH transfer costs 21000 gas as a conservative estimate.
+				ethTransferGas.Mul(gasFeeCap, big.NewInt(21000))
+
+				// The ETH available after covering ERC20 gas and the ETH transfer itself.
+				remaining := new(big.Int).Set(bal.ETH)
+				if len(nonZeroTokens) > 0 && s.gasSource != nil && remaining.Cmp(walletGasCost) < 0 {
+					// Gas source would fund the deficit, so full ETH balance remains.
+				} else if len(nonZeroTokens) > 0 {
+					remaining.Sub(remaining, walletGasCost)
+				}
+				if remaining.Cmp(ethTransferGas) > 0 {
+					recoverableETH.Sub(remaining, ethTransferGas)
+				}
+			}
+
+			// Gas needed from gas source for this wallet.
+			fundingNeeded := new(big.Int)
+			if s.gasSource != nil && len(nonZeroTokens) > 0 && bal.ETH.Cmp(walletGasCost) < 0 {
+				fundingNeeded.Sub(walletGasCost, bal.ETH)
+			}
+
+			totalGasCostForWallet := new(big.Int).Add(walletGasCost, ethTransferGas)
+			totalGasCost.Add(totalGasCost, totalGasCostForWallet)
+			totalRecoverableETH.Add(totalRecoverableETH, recoverableETH)
+
+			attrs := []any{
+				"network", net.name,
+				"address", kp.Address.Hex(),
+				"ethBalance", bal.ETH.String(),
+				"recoverableETH", recoverableETH.String(),
+				"gasCost", totalGasCostForWallet.String(),
+			}
+			if fundingNeeded.Sign() > 0 {
+				attrs = append(attrs, "gasFundingNeeded", fundingNeeded.String())
+			}
+			for ti, tb := range bal.Tokens {
+				if tb.Sign() > 0 {
+					attrs = append(attrs, fmt.Sprintf("token_%s", net.tokens[ti].Hex()), tb.String())
+				}
+			}
+			s.logger.Info("dry-run: wallet", attrs...)
+		}
+
+		if walletsWithFunds == 0 {
+			s.logger.Info("dry-run: no wallets with funds", "network", net.name)
+			continue
+		}
+
+		summaryAttrs := []any{
+			"network", net.name,
+			"walletsWithFunds", walletsWithFunds,
+			"totalRecoverableETH", totalRecoverableETH.String(),
+			"totalEstimatedGasCost", totalGasCost.String(),
+		}
+		for ti, token := range net.tokens {
+			summaryAttrs = append(summaryAttrs, fmt.Sprintf("totalToken_%s", token.Hex()), tokenTotals[ti].String())
+		}
+		s.logger.Info("dry-run: summary", summaryAttrs...)
+	}
+
 	return nil
 }
 

@@ -305,7 +305,7 @@ func TestSweepAll_SkipsEmptyWalletsViaMulticall(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, testLogger())
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, testLogger())
 	if err := sw.SweepAll(context.Background(), []KeyPair{kp}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -126,7 +126,7 @@ func TestSweepAll_AllZeroBalances(t *testing.T) {
 	mock := fullMock()
 	kp := newTestKey(t)
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -159,7 +159,7 @@ func TestSweepAll_ETHOnly(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,7 +206,7 @@ func TestSweepAll_ERC20Only(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -255,7 +255,7 @@ func TestSweepAll_MixedSweep(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -314,7 +314,7 @@ func TestSweepAll_GasFunding(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, &gasSourceKP, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, &gasSourceKP, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -352,7 +352,7 @@ func TestSweepAll_NoGasSource(t *testing.T) {
 
 	// Without gas source, it will still try to send the ERC20 transfer
 	// (it doesn't check if there's enough gas — the tx will likely fail on-chain)
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -381,7 +381,7 @@ func TestSweepAll_ETHBelowGasCost(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -415,7 +415,7 @@ func TestSweepAll_BothNetworks(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(ethMock, zkMock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(ethMock, zkMock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -434,7 +434,7 @@ func TestSweepAll_ContextCanceled(t *testing.T) {
 	cancel()
 
 	mock := fullMock()
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, time.Second, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, time.Second, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(ctx, []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error for canceled context")
@@ -457,7 +457,7 @@ func TestSweepAll_BalanceError(t *testing.T) {
 		return nil, errors.New("rpc error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -476,7 +476,7 @@ func TestSweepAll_ERC20BalanceError(t *testing.T) {
 	}
 
 	token := common.HexToAddress("0xtoken")
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -493,7 +493,7 @@ func TestSweepAll_SendTransactionError(t *testing.T) {
 		return errors.New("send error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -510,7 +510,7 @@ func TestSweepAll_FailedReceipt(t *testing.T) {
 		return &types.Receipt{Status: types.ReceiptStatusFailed}, nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error for failed receipt")
@@ -530,7 +530,7 @@ func TestSweepAll_MultipleKeys(t *testing.T) {
 		return ethBalance, nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp1, kp2})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -563,7 +563,7 @@ func TestSweepAll_GasEstimateError(t *testing.T) {
 		return nil, errors.New("gas price error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -600,7 +600,7 @@ func TestSweepAll_ERC20SendError(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -634,7 +634,7 @@ func TestSweepAll_ERC20ChainIDError(t *testing.T) {
 		return nil, errors.New("chain ID error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -668,7 +668,7 @@ func TestSweepAll_ERC20NonceError(t *testing.T) {
 		return 0, errors.New("nonce error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -703,7 +703,7 @@ func TestSweepAll_ERC20GasPriceError(t *testing.T) {
 		return nil, errors.New("gas price error") // second call in sendERC20Transfer
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -742,7 +742,7 @@ func TestSweepAll_ERC20EstimateGasError(t *testing.T) {
 		return 0, errors.New("estimate error") // second call in sendERC20Transfer
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -776,7 +776,7 @@ func TestSweepAll_ERC20ReceiptError(t *testing.T) {
 		return nil, errors.New("receipt error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -810,7 +810,7 @@ func TestSweepAll_ERC20FailedReceipt(t *testing.T) {
 		return &types.Receipt{Status: types.ReceiptStatusFailed}, nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error for failed receipt")
@@ -832,7 +832,7 @@ func TestSweepAll_ETHChainIDError(t *testing.T) {
 		return nil, errors.New("chain ID error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -854,7 +854,7 @@ func TestSweepAll_ETHNonceError(t *testing.T) {
 		return 0, errors.New("nonce error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -876,7 +876,7 @@ func TestSweepAll_ETHReceiptError(t *testing.T) {
 		return nil, errors.New("receipt error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -900,7 +900,7 @@ func TestSweepAll_FinalBalanceCheckError(t *testing.T) {
 		return gasPrice, nil
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -923,7 +923,7 @@ func TestSweepAll_FinalGasPriceError(t *testing.T) {
 		return nil, errors.New("gas price error") // for final ETH sweep
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -938,7 +938,7 @@ func TestNewSweeper(t *testing.T) {
 	pk := newTestKey(t)
 	logger := slog.Default()
 
-	sw := NewSweeper(mock, mock, dest, ethTokens, zkTokens, &pk, 500*time.Millisecond, 0, false, logger)
+	sw := NewSweeper(mock, mock, dest, ethTokens, zkTokens, &pk, 500*time.Millisecond, 0, false, false, logger)
 	if sw.destination != dest {
 		t.Fatal("destination not set")
 	}
@@ -991,7 +991,7 @@ func TestSweepAll_ContinuesPastFailures(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp1, kp2})
 	// Should return error (there were failures) but kp2 should still be processed.
 	if err == nil {
@@ -1032,7 +1032,7 @@ func TestSweepAll_CircuitBreaker(t *testing.T) {
 
 	// Circuit breaker at 2 failures — should stop before processing kp2/kp3.
 	// With maxFailures=2: kp1 eth fails (1), kp1 zksync fails (2) → trips.
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 2, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 2, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp1, kp2, kp3})
 	if err == nil {
 		t.Fatal("expected error")
@@ -1062,7 +1062,7 @@ func TestSweepAll_CircuitBreakerMidKey(t *testing.T) {
 		return nil, errors.New("rpc error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 1, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 1, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp1})
 	if err == nil {
 		t.Fatal("expected error")
@@ -1089,7 +1089,7 @@ func TestSweepAll_FailureIncludesLineNum(t *testing.T) {
 		return nil, errors.New("rpc error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -1119,7 +1119,7 @@ func TestSweepAll_UnlimitedFailures(t *testing.T) {
 		return nil, errors.New("rpc error")
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), keys)
 	if err == nil {
 		t.Fatal("expected error")
@@ -1168,7 +1168,7 @@ func TestSweepAll_SkipETH(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, true, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, true, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1183,7 +1183,7 @@ func TestSweepAll_SkipETH(t *testing.T) {
 
 func TestNewSweeper_SkipETH(t *testing.T) {
 	mock := fullMock()
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, true, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, true, false, slog.New(slog.DiscardHandler))
 	if !sw.skipETH {
 		t.Fatal("skipETH not set")
 	}
@@ -1212,7 +1212,7 @@ func TestSweepAll_ETHTransferIsDynamicFeeTx(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1269,7 +1269,7 @@ func TestSweepAll_ERC20TransferIsDynamicFeeTx(t *testing.T) {
 		return nil
 	}
 
-	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, destination, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1318,7 +1318,7 @@ func TestSweepAll_ERC20GasTipCapError(t *testing.T) {
 		return nil, errors.New("tip cap error") // call in sendERC20Transfer
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
@@ -1343,7 +1343,7 @@ func TestSweepAll_ETHGasTipCapError(t *testing.T) {
 		return nil, errors.New("tip cap error") // call in sweepKey ETH path
 	}
 
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	err := sw.SweepAll(context.Background(), []KeyPair{kp})
 	if err == nil {
 		t.Fatal("expected error")
