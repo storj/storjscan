@@ -120,6 +120,7 @@ func TestIntegration_FullSweepFlow(t *testing.T) {
 		0,
 		0,
 		false,
+		false,
 		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	)
 
@@ -154,7 +155,7 @@ func TestIntegration_EmptyKeysFile(t *testing.T) {
 	}
 
 	mock := fullMock()
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	if err := sw.SweepAll(context.Background(), keys); err != nil {
 		t.Fatalf("SweepAll: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestIntegration_AllZeroBalances(t *testing.T) {
 	}
 
 	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, []common.Address{token}, nil, 0, 0, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, []common.Address{token}, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	if err := sw.SweepAll(context.Background(), []KeyPair{kp}); err != nil {
 		t.Fatalf("SweepAll: %v", err)
 	}
