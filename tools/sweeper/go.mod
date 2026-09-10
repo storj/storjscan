@@ -3,6 +3,7 @@ module storj.io/sweeper
 go 1.25.7
 
 require (
+	github.com/alecthomas/kong v1.16.1
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/ethereum/go-ethereum v1.17.0
 )
