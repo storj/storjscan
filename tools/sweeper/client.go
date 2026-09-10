@@ -5,6 +5,7 @@ package sweeper
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/big"
 	"time"
@@ -135,7 +136,7 @@ func (r *RetryClient) TransactionReceipt(ctx context.Context, txHash common.Hash
 	// doesn't appear as noise in standard output.  Use a longer timeout than
 	// regular RPC calls since mining can take much longer than a typical retry
 	// window (the default 15m was too short for mainnet congestion).
-	return backoff.Retry(ctx, func() (*types.Receipt, error) {
+	receipt, err := backoff.Retry(ctx, func() (*types.Receipt, error) {
 		result, err := r.client.TransactionReceipt(ctx, txHash)
 		if err != nil {
 			r.logger.Log(ctx, slog.LevelDebug, "retrying RPC call", "op", "TransactionReceipt", "error", err)
@@ -143,6 +144,14 @@ func (r *RetryClient) TransactionReceipt(ctx context.Context, txHash common.Hash
 		}
 		return result, nil
 	}, backoff.WithBackOff(r.newBackoff()), backoff.WithMaxElapsedTime(r.receiptTimeout))
+	if errors.Is(err, ethereum.NotFound) {
+		// A bare "not found" reads like a lookup failure. It actually means the
+		// transaction was accepted by the node but never mined in the whole
+		// wait window — it is either still pending or was dropped from the
+		// mempool. Name the transaction so it can be looked up.
+		return nil, fmt.Errorf("transaction %s not mined within %s, still pending or dropped: %w", txHash.Hex(), r.receiptTimeout, err)
+	}
+	return receipt, err
 }
 
 // WaitMined polls for a transaction receipt until the transaction is confirmed.

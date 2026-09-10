@@ -14,6 +14,78 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
+// TestSuggestGasFees_BaseFeeHeadroom pins down the property that keeps sweep
+// transactions minable: the fee cap must sit well above the current base fee.
+// eth_gasPrice returns baseFee+tip, which leaves a transaction unminable as
+// soon as the base fee ticks up (it rises up to 12.5% per block), stranding it
+// in the mempool until the receipt wait times out.
+func TestSuggestGasFees_BaseFeeHeadroom(t *testing.T) {
+	baseFee := big.NewInt(18_500_000_000) // 18.5 gwei
+	tip := big.NewInt(1_500_000_000)      // 1.5 gwei
+	gasPrice := new(big.Int).Add(baseFee, tip)
+
+	mock := &mockClient{
+		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
+			return gasPrice, nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return tip, nil
+		},
+	}
+
+	gasFeeCap, gasTipCap, err := suggestGasFees(context.Background(), mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gasTipCap.Cmp(tip) != 0 {
+		t.Fatalf("expected gasTipCap %s, got %s", tip, gasTipCap)
+	}
+
+	// Same formula as go-ethereum's bind package: tip + 2*baseFee.
+	want := new(big.Int).Add(tip, new(big.Int).Mul(baseFee, big.NewInt(2)))
+	if gasFeeCap.Cmp(want) != 0 {
+		t.Fatalf("expected gasFeeCap %s, got %s", want, gasFeeCap)
+	}
+
+	// The cap must survive several consecutive full blocks of base fee growth.
+	future := new(big.Int).Set(baseFee)
+	for range 6 {
+		future.Mul(future, big.NewInt(1125))
+		future.Div(future, big.NewInt(1000))
+	}
+	if gasFeeCap.Cmp(future) <= 0 {
+		t.Fatalf("gasFeeCap %s does not cover base fee %s after 6 full blocks", gasFeeCap, future)
+	}
+}
+
+// TestSuggestGasFees_NeverBelowSuggestion covers nodes whose eth_gasPrice is
+// not baseFee+tip (pre-EIP-1559 or non-standard chains): the fee cap must never
+// end up below what the node itself suggested.
+func TestSuggestGasFees_NeverBelowSuggestion(t *testing.T) {
+	gasPrice := big.NewInt(1_000_000_000)
+	tip := big.NewInt(5_000_000_000) // tip above gasPrice: no base fee to derive
+
+	mock := &mockClient{
+		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
+			return gasPrice, nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return tip, nil
+		},
+	}
+
+	gasFeeCap, gasTipCap, err := suggestGasFees(context.Background(), mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gasFeeCap.Cmp(gasPrice) < 0 {
+		t.Fatalf("gasFeeCap %s below suggested gas price %s", gasFeeCap, gasPrice)
+	}
+	if gasFeeCap.Cmp(gasTipCap) < 0 {
+		t.Fatalf("gasFeeCap %s below gasTipCap %s", gasFeeCap, gasTipCap)
+	}
+}
+
 func TestEstimateSweepGas_ETHOnly(t *testing.T) {
 	mock := &mockClient{
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
@@ -32,13 +104,21 @@ func TestEstimateSweepGas_ETHOnly(t *testing.T) {
 }
 
 func TestEstimateSweepGas_WithTokens(t *testing.T) {
-	gasPrice := big.NewInt(10000000000) // 10 gwei
+	baseFee := big.NewInt(9000000000) // 9 gwei
+	tip := big.NewInt(1000000000)     // 1 gwei
+	gasPrice := new(big.Int).Add(baseFee, tip)
+	// Funding has to cover the fee cap the sweep transactions will actually
+	// carry, which includes the base fee headroom.
+	gasFeeCap := new(big.Int).Add(tip, new(big.Int).Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier)))
 	token1Gas := uint64(60000)
 	token2Gas := uint64(80000)
 
 	mock := &mockClient{
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
 			return gasPrice, nil
+		},
+		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+			return tip, nil
 		},
 		estimateGasFn: func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 			if *msg.To == common.HexToAddress("0x01") {
@@ -59,7 +139,7 @@ func TestEstimateSweepGas_WithTokens(t *testing.T) {
 	}
 
 	totalGas := token1Gas + token2Gas
-	expectedCost := new(big.Int).Mul(new(big.Int).SetUint64(totalGas), gasPrice)
+	expectedCost := new(big.Int).Mul(new(big.Int).SetUint64(totalGas), gasFeeCap)
 	expectedCost.Mul(expectedCost, big.NewInt(130))
 	expectedCost.Div(expectedCost, big.NewInt(100))
 
@@ -122,8 +202,10 @@ func TestFundWallet_Success(t *testing.T) {
 	}
 	target := common.HexToAddress("0xaaaa")
 	amount := big.NewInt(1000000)
-	gasFeeCap := big.NewInt(20000000000) // 20 gwei
-	gasTipCap := big.NewInt(1500000000)  // 1.5 gwei
+	baseFee := big.NewInt(18500000000)  // 18.5 gwei
+	gasTipCap := big.NewInt(1500000000) // 1.5 gwei
+	gasPrice := new(big.Int).Add(baseFee, gasTipCap)
+	gasFeeCap := new(big.Int).Add(gasTipCap, new(big.Int).Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier)))
 
 	fundGas := uint64(21000)
 	var sentTx *types.Transaction
@@ -135,7 +217,7 @@ func TestFundWallet_Success(t *testing.T) {
 			return 5, nil
 		},
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
-			return gasFeeCap, nil
+			return gasPrice, nil
 		},
 		suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
 			return gasTipCap, nil
