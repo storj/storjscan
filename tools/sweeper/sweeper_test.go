@@ -1192,8 +1192,10 @@ func TestNewSweeper_SkipETH(t *testing.T) {
 func TestSweepAll_ETHTransferIsDynamicFeeTx(t *testing.T) {
 	kp := newTestKey(t)
 	destination := common.HexToAddress("0xdead")
-	gasFeeCap := big.NewInt(20000000000) // 20 gwei
-	gasTipCap := big.NewInt(1500000000)  // 1.5 gwei
+	baseFee := big.NewInt(18500000000)  // 18.5 gwei
+	gasTipCap := big.NewInt(1500000000) // 1.5 gwei
+	gasPrice := new(big.Int).Add(baseFee, gasTipCap)
+	gasFeeCap := new(big.Int).Add(gasTipCap, new(big.Int).Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier)))
 	ethBalance := big.NewInt(1000000000000000000)
 
 	var sentTx *types.Transaction
@@ -1202,7 +1204,7 @@ func TestSweepAll_ETHTransferIsDynamicFeeTx(t *testing.T) {
 		return ethBalance, nil
 	}
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
-		return gasFeeCap, nil
+		return gasPrice, nil
 	}
 	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
 		return gasTipCap, nil
@@ -1235,8 +1237,10 @@ func TestSweepAll_ERC20TransferIsDynamicFeeTx(t *testing.T) {
 	kp := newTestKey(t)
 	destination := common.HexToAddress("0xdead")
 	token := common.HexToAddress("0xtoken")
-	gasFeeCap := big.NewInt(20000000000)
+	baseFee := big.NewInt(18500000000)
 	gasTipCap := big.NewInt(1500000000)
+	gasPrice := new(big.Int).Add(baseFee, gasTipCap)
+	gasFeeCap := new(big.Int).Add(gasTipCap, new(big.Int).Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier)))
 	tokenBalance := big.NewInt(5000000)
 	ethBalance := big.NewInt(1000000000000000000)
 
@@ -1246,7 +1250,7 @@ func TestSweepAll_ERC20TransferIsDynamicFeeTx(t *testing.T) {
 		return ethBalance, nil
 	}
 	mock.suggestGasPriceFn = func(ctx context.Context) (*big.Int, error) {
-		return gasFeeCap, nil
+		return gasPrice, nil
 	}
 	mock.suggestGasTipCapFn = func(ctx context.Context) (*big.Int, error) {
 		return gasTipCap, nil

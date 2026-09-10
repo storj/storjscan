@@ -7,8 +7,10 @@ import (
 	"errors"
 	"log/slog"
 	"math/big"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -275,6 +277,35 @@ func TestRetryClient_TransactionReceipt_RetriesThenSucceeds(t *testing.T) {
 	}
 	if calls.Load() != 3 {
 		t.Fatalf("expected 3 calls, got %d", calls.Load())
+	}
+}
+
+// TestRetryClient_TransactionReceipt_TimeoutError checks that giving up on a
+// receipt reports what actually happened — which transaction, and that it was
+// still unmined when the wait expired — instead of a bare "not found" that
+// gives an operator nothing to look up on a block explorer.
+func TestRetryClient_TransactionReceipt_TimeoutError(t *testing.T) {
+	txHash := common.HexToHash("0xabc123")
+	mock := &mockClient{
+		transactionReceiptFn: func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+			return nil, ethereum.NotFound
+		},
+	}
+	rc := NewRetryClient(mock, testLogger())
+	rc.SetReceiptTimeout(10 * time.Millisecond)
+
+	_, err := rc.TransactionReceipt(context.Background(), txHash)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), txHash.Hex()) {
+		t.Errorf("error does not name the transaction: %v", err)
+	}
+	if !strings.Contains(err.Error(), "not mined within") {
+		t.Errorf("error does not explain the timeout: %v", err)
+	}
+	if !errors.Is(err, ethereum.NotFound) {
+		t.Errorf("error no longer wraps ethereum.NotFound: %v", err)
 	}
 }
 

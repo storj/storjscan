@@ -12,17 +12,45 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+// baseFeeWiggleMultiplier is how many times the current base fee the gas fee cap
+// covers, matching go-ethereum's bind package. The base fee can grow by 12.5%
+// per block, so a 2x cap keeps a transaction minable across roughly six
+// consecutive full blocks instead of going stale after one.
+const baseFeeWiggleMultiplier = 2
+
 // suggestGasFees fetches the EIP-1559 gas fee cap and tip cap from the network.
-// gasFeeCap is the value returned by SuggestGasPrice (which on EIP-1559 networks
-// returns baseFee*2 + tip, a safe upper bound). gasTipCap is the priority fee.
+//
+// gasTipCap is the priority fee suggested by the node. gasFeeCap is
+// gasTipCap + baseFee*baseFeeWiggleMultiplier, the same formula go-ethereum's
+// bind package uses. The base fee is derived from the two suggestions
+// (eth_gasPrice returns baseFee + tip on EIP-1559 networks), so no extra RPC
+// call is needed.
+//
+// Note that SuggestGasPrice alone is NOT a safe fee cap: it embeds only a
+// single base fee, so the transaction becomes unminable as soon as the base fee
+// ticks up and then sits in the mempool until the receipt wait times out.
 func suggestGasFees(ctx context.Context, client BlockchainClient) (gasFeeCap, gasTipCap *big.Int, err error) {
-	gasFeeCap, err = client.SuggestGasPrice(ctx)
+	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("suggest gas price: %w", err)
 	}
 	gasTipCap, err = client.SuggestGasTipCap(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("suggest gas tip cap: %w", err)
+	}
+
+	baseFee := new(big.Int).Sub(gasPrice, gasTipCap)
+	if baseFee.Sign() < 0 {
+		// Not an EIP-1559 gas price (or the two suggestions raced across a
+		// block boundary); there is no base fee to add headroom for.
+		baseFee.SetInt64(0)
+	}
+	baseFee.Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier))
+	gasFeeCap = new(big.Int).Add(gasTipCap, baseFee)
+
+	// Never bid below what the node itself suggested.
+	if gasFeeCap.Cmp(gasPrice) < 0 {
+		gasFeeCap.Set(gasPrice)
 	}
 	return gasFeeCap, gasTipCap, nil
 }
