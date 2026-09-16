@@ -86,6 +86,10 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 		return err
 	}
 
+	// Sweep the fattest wallets first, so a run that is cut short still moved
+	// most of the funds.
+	keys, balances = sortByAmountDesc(keys, balances, s.tokenDecimals(ctx))
+
 	if s.dryRun {
 		return s.dryRunReport(ctx, keys, balances)
 	}
@@ -481,6 +485,23 @@ func (s *Sweeper) queryBalances(ctx context.Context, addrs []common.Address) ([]
 	}
 	logBalanceSummary(s.logger, network, balances, s.tokens)
 	return balances, nil
+}
+
+// tokenDecimals reads the decimals of every configured token, so balances of
+// different scale can be compared when ordering the sweep. decimals() is
+// optional in ERC20: a token that does not answer is reported as
+// UnknownDecimals and ranked in raw units rather than failing the sweep.
+func (s *Sweeper) tokenDecimals(ctx context.Context) []int {
+	decimals := make([]int, len(s.tokens))
+	for i, token := range s.tokens {
+		dec, err := ERC20Decimals(ctx, s.client, token)
+		if err != nil {
+			s.logger.Warn("failed to read token decimals, ordering by raw units", "network", s.paymentType.Network(), "token", token.Hex(), "error", err)
+			dec = UnknownDecimals
+		}
+		decimals[i] = dec
+	}
+	return decimals
 }
 
 func logBalanceSummary(logger *slog.Logger, network string, balances []WalletBalances, tokens []common.Address) {

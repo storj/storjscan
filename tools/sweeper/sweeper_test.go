@@ -542,6 +542,54 @@ func TestSweepAll_MultipleKeys(t *testing.T) {
 	}
 }
 
+func TestSweepAll_LargestBalanceFirst(t *testing.T) {
+	small := newTestKey(t)
+	large := newTestKey(t)
+	medium := newTestKey(t)
+	keys := []KeyPair{small, large, medium}
+
+	balances := map[common.Address]*big.Int{
+		small.Address:  big.NewInt(1e18),
+		large.Address:  big.NewInt(3e18),
+		medium.Address: big.NewInt(2e18),
+	}
+
+	var order []common.Address
+	seen := make(map[common.Address]bool)
+	mock := fullMock()
+	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		if !seen[account] {
+			seen[account] = true
+			order = append(order, account)
+		}
+		return balances[account], nil
+	}
+	// No tokens are configured, so the multicall holds exactly one ETH balance
+	// sub-call per wallet, in the order the keys were passed in.
+	mock.callContractFn = func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+		vals := make([]*big.Int, len(keys))
+		for i, kp := range keys {
+			vals[i] = balances[kp.Address]
+		}
+		return encodeAggregate3Response(vals), nil
+	}
+
+	sw := NewSweeper(mock, PaymentTypeL1, common.HexToAddress("0xdead"), nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
+	if err := sw.SweepAll(context.Background(), keys); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []common.Address{large.Address, medium.Address, small.Address}
+	if len(order) != len(want) {
+		t.Fatalf("expected %d wallets swept, got %d", len(want), len(order))
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("sweep order %d: got %s, want %s", i, order[i].Hex(), want[i].Hex())
+		}
+	}
+}
+
 func TestSweepAll_GasEstimateError(t *testing.T) {
 	kp := newTestKey(t)
 	token := common.HexToAddress("0xtoken")
