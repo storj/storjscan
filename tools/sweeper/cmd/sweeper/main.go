@@ -31,7 +31,7 @@ type CLI struct {
 // handled by separate invocations.
 type Common struct {
 	Keys       string              `name:"keys" type:"existingfile" required:"" help:"Path to file of private keys (hex, no 0x prefix, one per line)."`
-	Type       sweeper.PaymentType `name:"type" required:"" enum:"l1,l2" placeholder:"l1|l2" help:"Payment type to work on: l1 (Ethereum) or l2 (zkSync Era)."`
+	Type       sweeper.PaymentType `name:"type" required:"" enum:"l1,l2,l1-7702" placeholder:"l1|l2|l1-7702" help:"Payment type to work on: l1 (Ethereum), l2 (zkSync Era), or l1-7702 (Ethereum, swept through an EIP-7702 delegation)."`
 	Endpoint   string              `name:"endpoint" required:"" help:"JSON-RPC endpoint of the payment type's chain."`
 	Tokens     []common.Address    `name:"tokens" help:"Comma-separated list of ERC20 contract addresses on the payment type's chain."`
 	FilterKeys []common.Address    `name:"filter-keys" help:"Comma-separated list of public addresses to restrict this command to."`
@@ -41,23 +41,24 @@ type Common struct {
 type RunCmd struct {
 	Common
 
-	Destination    common.Address `name:"destination" required:"" help:"Destination address for swept funds."`
-	GasSource      string         `name:"gas-source" type:"existingfile" help:"Path to file containing private key (hex, no 0x) of a wallet with ETH for gas funding."`
-	RateDelay      time.Duration  `name:"rate-delay" default:"200ms" help:"Delay between RPC calls per key."`
-	MaxFailures    int            `name:"max-failures" default:"25" help:"Maximum number of wallet failures before aborting (0 for unlimited)."`
-	SkipETH        bool           `name:"skip-eth" help:"Skip sweeping ETH, only sweep ERC20 tokens."`
-	DryRun         bool           `name:"dry-run" help:"Print estimated recoverable balances and gas costs without sending any transactions."`
-	ReceiptTimeout time.Duration  `name:"receipt-timeout" default:"30m" help:"Maximum time to wait for a transaction to be mined."`
+	Destination     common.Address `name:"destination" required:"" help:"Destination address for swept funds."`
+	GasSource       string         `name:"gas-source" type:"existingfile" help:"Path to file containing private key (hex, no 0x) of a wallet with ETH for gas funding."`
+	SweeperContract common.Address `name:"sweeper-contract" help:"Address of the deployed Sweeper7702 contract the wallets delegate their code to (--type l1-7702 only)."`
+	DestinationKey  string         `name:"destination-key" type:"existingfile" help:"Path to file containing the private key (hex, no 0x) of the destination wallet, which signs and pays for every transaction (--type l1-7702 only)."`
+	RateDelay       time.Duration  `name:"rate-delay" default:"200ms" help:"Delay between RPC calls per key."`
+	MaxFailures     int            `name:"max-failures" default:"25" help:"Maximum number of wallet failures before aborting (0 for unlimited)."`
+	SkipETH         bool           `name:"skip-eth" help:"Skip sweeping ETH, only sweep ERC20 tokens."`
+	DryRun          bool           `name:"dry-run" help:"Print estimated recoverable balances and gas costs without sending any transactions."`
+	ReceiptTimeout  time.Duration  `name:"receipt-timeout" default:"30m" help:"Maximum time to wait for a transaction to be mined."`
 }
 
 // Run executes the sweep.
 func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
-	keys, err := c.loadKeys(logger)
-	if err != nil {
+	if err := c.validate(); err != nil {
 		return err
 	}
 
-	gasSource, err := loadGasSource(c.GasSource, logger)
+	keys, err := c.loadKeys(logger)
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,24 @@ func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer closeClient()
 
-	sw := sweeper.NewSweeper(client, c.Type, c.Destination, c.Tokens, gasSource, c.RateDelay, c.MaxFailures, c.SkipETH, c.DryRun, logger)
+	var sw *sweeper.Sweeper
+	if c.Type == sweeper.PaymentTypeL17702 {
+		sponsor, err := loadKey(c.DestinationKey)
+		if err != nil {
+			return fmt.Errorf("destination key: %w", err)
+		}
+		logger.Info("destination key loaded, it pays for every transaction", "address", sponsor.Address.Hex())
+		sw = sweeper.NewDelegatedSweeper(client, c.Type, c.Destination, c.Tokens, &sweeper.Delegation{
+			Contract: c.SweeperContract,
+			Sponsor:  sponsor,
+		}, c.RateDelay, c.MaxFailures, c.DryRun, logger)
+	} else {
+		gasSource, err := loadGasSource(c.GasSource, logger)
+		if err != nil {
+			return err
+		}
+		sw = sweeper.NewSweeper(client, c.Type, c.Destination, c.Tokens, gasSource, c.RateDelay, c.MaxFailures, c.SkipETH, c.DryRun, logger)
+	}
 
 	logger.Info("starting sweep", "network", c.Type.Network(), "keys", len(keys), "tokens", len(c.Tokens))
 
@@ -77,6 +95,36 @@ func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	logger.Info("sweep completed successfully")
+	return nil
+}
+
+// validate rejects flag combinations that do not apply to the selected payment
+// type, rather than silently ignoring them: each mode pays for gas differently,
+// so a flag landing in the wrong mode usually means the sweep would not do what
+// was asked.
+func (c *RunCmd) validate() error {
+	if c.Type != sweeper.PaymentTypeL17702 {
+		if c.SweeperContract != (common.Address{}) {
+			return fmt.Errorf("--sweeper-contract only applies to --type %s", sweeper.PaymentTypeL17702)
+		}
+		if c.DestinationKey != "" {
+			return fmt.Errorf("--destination-key only applies to --type %s", sweeper.PaymentTypeL17702)
+		}
+		return nil
+	}
+
+	if c.SweeperContract == (common.Address{}) {
+		return fmt.Errorf("--sweeper-contract is required for --type %s", sweeper.PaymentTypeL17702)
+	}
+	if c.DestinationKey == "" {
+		return fmt.Errorf("--destination-key is required for --type %s: it signs and pays for every transaction", sweeper.PaymentTypeL17702)
+	}
+	if c.GasSource != "" {
+		return fmt.Errorf("--gas-source does not apply to --type %s: the destination key pays for all gas", sweeper.PaymentTypeL17702)
+	}
+	if c.SkipETH {
+		return fmt.Errorf("--skip-eth does not apply to --type %s: the contract always sweeps the whole ETH balance", sweeper.PaymentTypeL17702)
+	}
 	return nil
 }
 
@@ -148,17 +196,25 @@ func loadGasSource(path string, logger *slog.Logger) (*sweeper.KeyPair, error) {
 	if path == "" {
 		return nil, nil
 	}
+	kp, err := loadKey(path)
+	if err != nil {
+		return nil, fmt.Errorf("gas source: %w", err)
+	}
+	logger.Info("gas source configured", "address", kp.Address.Hex())
+	return kp, nil
+}
+
+// loadKey reads a single private key (hex, no 0x prefix) from a file.
+func loadKey(path string) (*sweeper.KeyPair, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read gas source file: %w", err)
+		return nil, fmt.Errorf("failed to read key file: %w", err)
 	}
 	pk, err := crypto.HexToECDSA(strings.TrimSpace(string(data)))
 	if err != nil {
-		return nil, fmt.Errorf("invalid gas source key: %w", err)
+		return nil, fmt.Errorf("invalid key: %w", err)
 	}
-	addr := crypto.PubkeyToAddress(pk.PublicKey)
-	logger.Info("gas source configured", "address", addr.Hex())
-	return &sweeper.KeyPair{PrivateKey: pk, Address: addr}, nil
+	return &sweeper.KeyPair{PrivateKey: pk, Address: crypto.PubkeyToAddress(pk.PublicKey)}, nil
 }
 
 // addressMapper decodes a hex Ethereum address, with or without the 0x prefix.
