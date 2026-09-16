@@ -62,10 +62,19 @@ func EstimateSweepGas(ctx context.Context, client BlockchainClient, from common.
 	if err != nil {
 		return nil, err
 	}
+	totalGas, err := estimateSweepGasUnits(ctx, client, from, destination, tokens)
+	if err != nil {
+		return nil, err
+	}
+	return sweepGasCost(totalGas, gasFeeCap), nil
+}
 
+// estimateSweepGasUnits asks the node what one ERC20 transfer of each token
+// from the wallet would take, and adds them up. The units are what differs
+// between wallets; the price is the same for all of them, so a caller planning
+// many wallets can look it up once and price the units with sweepGasCost.
+func estimateSweepGasUnits(ctx context.Context, client BlockchainClient, from common.Address, destination common.Address, tokens []common.Address) (uint64, error) {
 	var totalGas uint64
-
-	// Gas for each ERC20 transfer
 	for _, token := range tokens {
 		transferData := ERC20TransferData(destination, big.NewInt(1))
 		gas, err := client.EstimateGas(ctx, ethereum.CallMsg{
@@ -74,19 +83,20 @@ func EstimateSweepGas(ctx context.Context, client BlockchainClient, from common.
 			Data: transferData,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("estimate gas for token %s: %w", token.Hex(), err)
+			return 0, fmt.Errorf("estimate gas for token %s: %w", token.Hex(), err)
 		}
 		totalGas += gas
 	}
+	return totalGas, nil
+}
 
-	// Total cost = totalGas * gasFeeCap
-	cost := new(big.Int).Mul(new(big.Int).SetUint64(totalGas), gasFeeCap)
-
-	// Add 30% buffer: cost = cost * 130 / 100
+// sweepGasCost prices gas units at gasFeeCap with the 30% buffer the sweep
+// funds wallets with.
+func sweepGasCost(gasUnits uint64, gasFeeCap *big.Int) *big.Int {
+	cost := new(big.Int).Mul(new(big.Int).SetUint64(gasUnits), gasFeeCap)
 	cost.Mul(cost, big.NewInt(130))
 	cost.Div(cost, big.NewInt(100))
-
-	return cost, nil
+	return cost
 }
 
 // FundWallet sends ETH from the gas source key to the target wallet and waits

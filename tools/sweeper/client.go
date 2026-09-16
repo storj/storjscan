@@ -20,6 +20,7 @@ import (
 // BlockchainClient defines the interface for interacting with an Ethereum-compatible blockchain.
 type BlockchainClient interface {
 	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
+	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	PendingNonceAt(ctx context.Context, account common.Address) (uint64, error)
 	SuggestGasPrice(ctx context.Context) (*big.Int, error)
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
@@ -76,6 +77,12 @@ func retry[T any](ctx context.Context, r *RetryClient, op string, level slog.Lev
 func (r *RetryClient) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	return retry(ctx, r, "BalanceAt", slog.LevelWarn, func() (*big.Int, error) {
 		return r.client.BalanceAt(ctx, account, blockNumber)
+	})
+}
+
+func (r *RetryClient) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {
+	return retry(ctx, r, "CodeAt", slog.LevelWarn, func() ([]byte, error) {
+		return r.client.CodeAt(ctx, account, blockNumber)
 	})
 }
 

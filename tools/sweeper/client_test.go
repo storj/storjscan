@@ -20,6 +20,7 @@ import (
 // mockClient implements BlockchainClient for testing.
 type mockClient struct {
 	balanceAtFn          func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
+	codeAtFn             func(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	pendingNonceAtFn     func(ctx context.Context, account common.Address) (uint64, error)
 	suggestGasPriceFn    func(ctx context.Context) (*big.Int, error)
 	suggestGasTipCapFn   func(ctx context.Context) (*big.Int, error)
@@ -32,6 +33,13 @@ type mockClient struct {
 
 func (m *mockClient) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	return m.balanceAtFn(ctx, account, blockNumber)
+}
+
+func (m *mockClient) CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error) {
+	if m.codeAtFn != nil {
+		return m.codeAtFn(ctx, account, blockNumber)
+	}
+	return nil, nil // default: a plain EOA with no code
 }
 
 func (m *mockClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
