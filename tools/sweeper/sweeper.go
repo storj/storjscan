@@ -9,9 +9,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // SweepFailure records a failed sweep attempt.
@@ -22,22 +20,55 @@ type SweepFailure struct {
 	Err     error
 }
 
-// Sweeper orchestrates sweeping ETH and ERC20 tokens from deposit wallets
-// into a single destination address, for one payment type.
-type Sweeper struct {
+// sweepConfig is what every sweep needs to reach the chain, shared by the
+// Sweeper and by the strategy that moves the funds.
+type sweepConfig struct {
 	client      BlockchainClient
 	paymentType PaymentType
 	destination common.Address
 	tokens      []common.Address
-	gasSource   *KeyPair
 	rateDelay   time.Duration
-	maxFailures int
-	skipETH     bool
-	dryRun      bool
 	logger      *slog.Logger
 }
 
-// NewSweeper creates a new Sweeper. Set maxFailures to 0 for unlimited.
+// network is the chain name used in logs.
+func (c sweepConfig) network() string {
+	return c.paymentType.Network()
+}
+
+// Sweeper orchestrates sweeping ETH and ERC20 tokens from deposit wallets
+// into a single destination address, for one payment type.
+type Sweeper struct {
+	sweepConfig
+
+	strategy    sweepStrategy
+	maxFailures int
+	skipETH     bool
+}
+
+// reportDestinationBalance logs what the destination holds, so a run ends with
+// the number the operator is actually after.
+func (c sweepConfig) reportDestinationBalance(ctx context.Context) error {
+	eth, err := c.client.BalanceAt(ctx, c.destination, nil)
+	if err != nil {
+		return fmt.Errorf("destination balance: %w", err)
+	}
+
+	attrs := []any{"network", c.network(), "destination", c.destination.Hex(), "ETH", eth.String()}
+	for _, token := range c.tokens {
+		balance, err := ERC20BalanceOf(ctx, c.client, token, c.destination)
+		if err != nil {
+			c.logger.Warn("failed to read destination token balance", "network", c.network(), "token", token.Hex(), "error", err)
+			continue
+		}
+		attrs = append(attrs, fmt.Sprintf("token_%s", token.Hex()), balance.String())
+	}
+	c.logger.Info("destination balance", attrs...)
+	return nil
+}
+
+// NewSweeper creates a Sweeper that moves funds with transactions sent by the
+// deposit wallets themselves. Set maxFailures to 0 for unlimited.
 func NewSweeper(
 	client BlockchainClient,
 	paymentType PaymentType,
@@ -50,17 +81,58 @@ func NewSweeper(
 	dryRun bool,
 	logger *slog.Logger,
 ) *Sweeper {
-	return &Sweeper{
+	cfg := sweepConfig{
 		client:      client,
 		paymentType: paymentType,
 		destination: destination,
 		tokens:      tokens,
-		gasSource:   gasSource,
 		rateDelay:   rateDelay,
+		logger:      logger,
+	}
+	return &Sweeper{
+		sweepConfig: cfg,
+		strategy:    strategyFor(cfg, newDirectStrategy(cfg, gasSource, skipETH), dryRun),
 		maxFailures: maxFailures,
 		skipETH:     skipETH,
-		dryRun:      dryRun,
+	}
+}
+
+// strategyFor returns the strategy a sweep should run with: the one that does
+// the work, or the dry run standing in front of it.
+func strategyFor(cfg sweepConfig, real sweepStrategy, dryRun bool) sweepStrategy {
+	if dryRun {
+		return newDryRunStrategy(cfg, real)
+	}
+	return real
+}
+
+// NewDelegatedSweeper creates a Sweeper that moves funds with an EIP-7702
+// delegation instead of transactions sent from the deposit wallets. The
+// delegation's sponsor pays for everything, so there is no gas source and no
+// option to skip ETH: the contract always takes the whole balance.
+func NewDelegatedSweeper(
+	client BlockchainClient,
+	paymentType PaymentType,
+	destination common.Address,
+	tokens []common.Address,
+	delegation *Delegation,
+	rateDelay time.Duration,
+	maxFailures int,
+	dryRun bool,
+	logger *slog.Logger,
+) *Sweeper {
+	cfg := sweepConfig{
+		client:      client,
+		paymentType: paymentType,
+		destination: destination,
+		tokens:      tokens,
+		rateDelay:   rateDelay,
 		logger:      logger,
+	}
+	return &Sweeper{
+		sweepConfig: cfg,
+		strategy:    strategyFor(cfg, newDelegatedStrategy(cfg, delegation), dryRun),
+		maxFailures: maxFailures,
 	}
 }
 
@@ -74,6 +146,10 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 	}
 	if len(keys) == 0 {
 		return nil
+	}
+
+	if err := s.strategy.prepare(ctx); err != nil {
+		return err
 	}
 
 	addrs := make([]common.Address, len(keys))
@@ -90,18 +166,14 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 	// most of the funds.
 	keys, balances = sortByAmountDesc(keys, balances, s.tokenDecimals(ctx))
 
-	if s.dryRun {
-		return s.dryRunReport(ctx, keys, balances)
-	}
-
-	network := s.paymentType.Network()
+	network := s.network()
 
 	var failures []SweepFailure
 	for i, kp := range keys {
 		if !balances[i].HasFunds() {
 			continue
 		}
-		if err := s.sweepKey(ctx, kp); err != nil {
+		if err := s.strategy.sweepWallet(ctx, kp, balances[i]); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -113,6 +185,12 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 			}
 		}
 	}
+	// Reporting where the sweep ended up is worth doing even after failures,
+	// and never worth turning a finished sweep into an error.
+	if err := s.strategy.finalize(ctx); err != nil {
+		s.logger.Warn("could not report the final state", "network", network, "error", err)
+	}
+
 	if len(failures) > 0 {
 		s.logger.Error("sweep completed with failures", "total", len(failures))
 		for _, f := range failures {
@@ -123,351 +201,8 @@ func (s *Sweeper) SweepAll(ctx context.Context, keys []KeyPair) error {
 	return nil
 }
 
-// dryRunReport prints a summary of what would be swept without sending any transactions.
-// For each wallet with funds it estimates gas costs and logs recoverable balances.
-func (s *Sweeper) dryRunReport(ctx context.Context, keys []KeyPair, balances []WalletBalances) error {
-	network := s.paymentType.Network()
-
-	totalRecoverableETH := new(big.Int)
-	totalGasCost := new(big.Int)
-	tokenTotals := make([]*big.Int, len(s.tokens))
-	for i := range tokenTotals {
-		tokenTotals[i] = new(big.Int)
-	}
-	walletsWithFunds := 0
-
-	for i, kp := range keys {
-		bal := balances[i]
-		if !bal.HasFunds() {
-			continue
-		}
-		walletsWithFunds++
-
-		// Collect non-zero tokens for this wallet.
-		var nonZeroTokens []common.Address
-		for ti, tb := range bal.Tokens {
-			if tb.Sign() > 0 {
-				nonZeroTokens = append(nonZeroTokens, s.tokens[ti])
-				tokenTotals[ti].Add(tokenTotals[ti], tb)
-			}
-		}
-
-		// Estimate gas cost for ERC20 transfers.
-		var walletGasCost *big.Int
-		if len(nonZeroTokens) > 0 {
-			cost, err := EstimateSweepGas(ctx, s.client, kp.Address, s.destination, nonZeroTokens)
-			if err != nil {
-				s.logger.Warn("dry-run: failed to estimate gas", "network", network, "address", kp.Address.Hex(), "error", err)
-				continue
-			}
-			walletGasCost = cost
-		} else {
-			walletGasCost = new(big.Int)
-		}
-
-		// Estimate ETH recovery.
-		recoverableETH := new(big.Int)
-		ethTransferGas := new(big.Int)
-		if !s.skipETH && bal.ETH.Sign() > 0 {
-			gasFeeCap, _, err := suggestGasFees(ctx, s.client)
-			if err != nil {
-				s.logger.Warn("dry-run: failed to get gas fees", "network", network, "address", kp.Address.Hex(), "error", err)
-				continue
-			}
-			// ETH transfer costs 21000 gas as a conservative estimate.
-			ethTransferGas.Mul(gasFeeCap, big.NewInt(21000))
-
-			// The ETH available after covering ERC20 gas and the ETH transfer itself.
-			remaining := new(big.Int).Set(bal.ETH)
-			if len(nonZeroTokens) > 0 && s.gasSource != nil && remaining.Cmp(walletGasCost) < 0 {
-				// Gas source would fund the deficit, so full ETH balance remains.
-			} else if len(nonZeroTokens) > 0 {
-				remaining.Sub(remaining, walletGasCost)
-			}
-			if remaining.Cmp(ethTransferGas) > 0 {
-				recoverableETH.Sub(remaining, ethTransferGas)
-			}
-		}
-
-		// Gas needed from gas source for this wallet.
-		fundingNeeded := new(big.Int)
-		if s.gasSource != nil && len(nonZeroTokens) > 0 && bal.ETH.Cmp(walletGasCost) < 0 {
-			fundingNeeded.Sub(walletGasCost, bal.ETH)
-		}
-
-		totalGasCostForWallet := new(big.Int).Add(walletGasCost, ethTransferGas)
-		totalGasCost.Add(totalGasCost, totalGasCostForWallet)
-		totalRecoverableETH.Add(totalRecoverableETH, recoverableETH)
-
-		attrs := []any{
-			"network", network,
-			"address", kp.Address.Hex(),
-			"ethBalance", bal.ETH.String(),
-			"recoverableETH", recoverableETH.String(),
-			"gasCost", totalGasCostForWallet.String(),
-		}
-		if fundingNeeded.Sign() > 0 {
-			attrs = append(attrs, "gasFundingNeeded", fundingNeeded.String())
-		}
-		for ti, tb := range bal.Tokens {
-			if tb.Sign() > 0 {
-				attrs = append(attrs, fmt.Sprintf("token_%s", s.tokens[ti].Hex()), tb.String())
-			}
-		}
-		s.logger.Info("dry-run: wallet", attrs...)
-	}
-
-	if walletsWithFunds == 0 {
-		s.logger.Info("dry-run: no wallets with funds", "network", network)
-		return nil
-	}
-
-	summaryAttrs := []any{
-		"network", network,
-		"walletsWithFunds", walletsWithFunds,
-		"totalRecoverableETH", totalRecoverableETH.String(),
-		"totalEstimatedGasCost", totalGasCost.String(),
-	}
-	for ti, token := range s.tokens {
-		summaryAttrs = append(summaryAttrs, fmt.Sprintf("totalToken_%s", token.Hex()), tokenTotals[ti].String())
-	}
-	s.logger.Info("dry-run: summary", summaryAttrs...)
-
-	return nil
-}
-
-func (s *Sweeper) sweepKey(ctx context.Context, kp KeyPair) error {
-	client := s.client
-	network := s.paymentType.Network()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(s.rateDelay):
-	}
-
-	s.logger.Info("checking wallet", "network", network, "address", kp.Address.Hex())
-
-	// Check ETH balance
-	ethBalance, err := client.BalanceAt(ctx, kp.Address, nil)
-	if err != nil {
-		return fmt.Errorf("balance check: %w", err)
-	}
-
-	// Check ERC20 balances
-	type tokenBalance struct {
-		token   common.Address
-		balance *big.Int
-	}
-	var nonZeroTokens []tokenBalance
-	for _, token := range s.tokens {
-		balance, err := ERC20BalanceOf(ctx, client, token, kp.Address)
-		if err != nil {
-			return fmt.Errorf("erc20 balance %s: %w", token.Hex(), err)
-		}
-		if balance.Sign() > 0 {
-			nonZeroTokens = append(nonZeroTokens, tokenBalance{token: token, balance: balance})
-		}
-	}
-
-	// Skip if all balances are zero
-	if ethBalance.Sign() == 0 && len(nonZeroTokens) == 0 {
-		s.logger.Info("skipping wallet, all balances zero", "network", network, "address", kp.Address.Hex())
-		return nil
-	}
-
-	// Calculate gas needed for all non-zero transfers
-	var tokensToEstimate []common.Address
-	for _, tb := range nonZeroTokens {
-		tokensToEstimate = append(tokensToEstimate, tb.token)
-	}
-	gasCost, err := EstimateSweepGas(ctx, client, kp.Address, s.destination, tokensToEstimate)
-	if err != nil {
-		return fmt.Errorf("estimate gas: %w", err)
-	}
-
-	// Fund wallet from gas source if needed.
-	// Only fund when there are ERC20 tokens to sweep — those can't pay for
-	// their own gas. For ETH-only sweeps, the gas cost is simply deducted
-	// from the swept amount; funding externally would spend more than is
-	// recovered.
-	if s.gasSource != nil && len(nonZeroTokens) > 0 && ethBalance.Cmp(gasCost) < 0 {
-		deficit := new(big.Int).Sub(gasCost, ethBalance)
-		s.logger.Info("funding wallet for gas", "network", network, "address", kp.Address.Hex(), "amount", deficit.String())
-		if err := FundWallet(ctx, client, s.gasSource, kp.Address, deficit); err != nil {
-			return fmt.Errorf("fund wallet: %w", err)
-		}
-		// Re-check ETH balance after funding
-		ethBalance, err = client.BalanceAt(ctx, kp.Address, nil)
-		if err != nil {
-			return fmt.Errorf("re-check balance: %w", err)
-		}
-	}
-
-	// Sweep each ERC20 token
-	for _, tb := range nonZeroTokens {
-		s.logger.Info("sweeping ERC20", "network", network, "address", kp.Address.Hex(), "token", tb.token.Hex(), "amount", tb.balance.String(), "destination", s.destination.Hex())
-
-		if err := s.sendERC20Transfer(ctx, kp, tb.token, tb.balance); err != nil {
-			return fmt.Errorf("sweep token %s: %w", tb.token.Hex(), err)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(s.rateDelay):
-		}
-	}
-
-	if s.skipETH {
-		s.logger.Info("skipping ETH sweep", "network", network, "address", kp.Address.Hex())
-		return nil
-	}
-
-	// Sweep remaining ETH
-	// Re-check balance since gas was spent on token transfers
-	ethBalance, err = client.BalanceAt(ctx, kp.Address, nil)
-	if err != nil {
-		return fmt.Errorf("final balance check: %w", err)
-	}
-
-	gasFeeCap, gasTipCap, err := suggestGasFees(ctx, client)
-	if err != nil {
-		return fmt.Errorf("gas fees for ETH sweep: %w", err)
-	}
-	dest := s.destination
-	ethGasLimit, err := client.EstimateGas(ctx, ethereum.CallMsg{
-		From:  kp.Address,
-		To:    &dest,
-		Value: ethBalance,
-	})
-	if err != nil {
-		return fmt.Errorf("estimate gas for ETH sweep: %w", err)
-	}
-	ethTransferCost := new(big.Int).Mul(gasFeeCap, new(big.Int).SetUint64(ethGasLimit))
-
-	if ethBalance.Cmp(ethTransferCost) > 0 {
-		sweepAmount := new(big.Int).Sub(ethBalance, ethTransferCost)
-		s.logger.Info("sweeping ETH", "network", network, "address", kp.Address.Hex(), "amount", sweepAmount.String(), "destination", s.destination.Hex())
-
-		if err := s.sendETHTransfer(ctx, kp, sweepAmount, ethGasLimit, gasFeeCap, gasTipCap); err != nil {
-			return fmt.Errorf("sweep ETH: %w", err)
-		}
-	} else {
-		s.logger.Info("skipping ETH sweep, balance below gas cost", "network", network, "address", kp.Address.Hex(), "balance", ethBalance.String(), "gasCost", ethTransferCost.String())
-	}
-
-	return nil
-}
-
-func (s *Sweeper) sendERC20Transfer(ctx context.Context, kp KeyPair, token common.Address, amount *big.Int) error {
-	client := s.client
-
-	chainID, err := client.ChainID(ctx)
-	if err != nil {
-		return fmt.Errorf("chain ID: %w", err)
-	}
-
-	nonce, err := client.PendingNonceAt(ctx, kp.Address)
-	if err != nil {
-		return fmt.Errorf("nonce: %w", err)
-	}
-
-	gasFeeCap, gasTipCap, err := suggestGasFees(ctx, client)
-	if err != nil {
-		return err
-	}
-
-	data := ERC20TransferData(s.destination, amount)
-	gasLimit, err := client.EstimateGas(ctx, ethereum.CallMsg{
-		From: kp.Address,
-		To:   &token,
-		Data: data,
-	})
-	if err != nil {
-		return fmt.Errorf("estimate gas: %w", err)
-	}
-
-	tx := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   chainID,
-		Nonce:     nonce,
-		To:        &token,
-		Gas:       gasLimit,
-		GasFeeCap: gasFeeCap,
-		GasTipCap: gasTipCap,
-		Data:      data,
-	})
-	signer := types.LatestSignerForChainID(chainID)
-	signedTx, err := types.SignTx(tx, signer, kp.PrivateKey)
-	if err != nil {
-		return fmt.Errorf("sign: %w", err)
-	}
-
-	if err := client.SendTransaction(ctx, signedTx); err != nil {
-		return fmt.Errorf("send: %w", err)
-	}
-
-	receipt, err := client.TransactionReceipt(ctx, signedTx.Hash())
-	if err != nil {
-		return fmt.Errorf("wait mined: %w", err)
-	}
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		return fmt.Errorf("transaction failed with status %d", receipt.Status)
-	}
-
-	return nil
-}
-
-// sendETHTransfer sends an ETH transfer using the gasLimit, gasFeeCap, and
-// gasTipCap already computed by the caller, ensuring the sweep amount and
-// transaction fee are consistent (no re-estimation that could cause
-// "insufficient funds" if the base fee ticks up between the two calls).
-func (s *Sweeper) sendETHTransfer(ctx context.Context, kp KeyPair, amount *big.Int, gasLimit uint64, gasFeeCap, gasTipCap *big.Int) error {
-	client := s.client
-
-	chainID, err := client.ChainID(ctx)
-	if err != nil {
-		return fmt.Errorf("chain ID: %w", err)
-	}
-
-	nonce, err := client.PendingNonceAt(ctx, kp.Address)
-	if err != nil {
-		return fmt.Errorf("nonce: %w", err)
-	}
-
-	dest := s.destination
-	tx := types.NewTx(&types.DynamicFeeTx{
-		ChainID:   chainID,
-		Nonce:     nonce,
-		To:        &dest,
-		Value:     amount,
-		Gas:       gasLimit,
-		GasFeeCap: gasFeeCap,
-		GasTipCap: gasTipCap,
-	})
-	signer := types.LatestSignerForChainID(chainID)
-	signedTx, err := types.SignTx(tx, signer, kp.PrivateKey)
-	if err != nil {
-		return fmt.Errorf("sign: %w", err)
-	}
-
-	if err := client.SendTransaction(ctx, signedTx); err != nil {
-		return fmt.Errorf("send: %w", err)
-	}
-
-	receipt, err := client.TransactionReceipt(ctx, signedTx.Hash())
-	if err != nil {
-		return fmt.Errorf("wait mined: %w", err)
-	}
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		return fmt.Errorf("transaction failed with status %d", receipt.Status)
-	}
-
-	return nil
-}
-
 func (s *Sweeper) queryBalances(ctx context.Context, addrs []common.Address) ([]WalletBalances, error) {
-	network := s.paymentType.Network()
+	network := s.network()
 
 	var minETH *big.Int
 	if !s.skipETH {
@@ -496,7 +231,7 @@ func (s *Sweeper) tokenDecimals(ctx context.Context) []int {
 	for i, token := range s.tokens {
 		dec, err := ERC20Decimals(ctx, s.client, token)
 		if err != nil {
-			s.logger.Warn("failed to read token decimals, ordering by raw units", "network", s.paymentType.Network(), "token", token.Hex(), "error", err)
+			s.logger.Warn("failed to read token decimals, ordering by raw units", "network", s.network(), "token", token.Hex(), "error", err)
 			dec = UnknownDecimals
 		}
 		decimals[i] = dec

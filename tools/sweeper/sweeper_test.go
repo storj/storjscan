@@ -558,11 +558,15 @@ func TestSweepAll_LargestBalanceFirst(t *testing.T) {
 	seen := make(map[common.Address]bool)
 	mock := fullMock()
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		balance, isWallet := balances[account]
+		if !isWallet {
+			return big.NewInt(0), nil // the destination, read by the final report
+		}
 		if !seen[account] {
 			seen[account] = true
 			order = append(order, account)
 		}
-		return balances[account], nil
+		return balance, nil
 	}
 	// No tokens are configured, so the multicall holds exactly one ETH balance
 	// sub-call per wallet, in the order the keys were passed in.
@@ -997,7 +1001,11 @@ func TestNewSweeper(t *testing.T) {
 	if len(sw.tokens) != 1 {
 		t.Fatal("tokens not set")
 	}
-	if sw.gasSource == nil {
+	direct, ok := sw.strategy.(*directStrategy)
+	if !ok {
+		t.Fatalf("expected a direct strategy, got %T", sw.strategy)
+	}
+	if direct.gasSource == nil {
 		t.Fatal("gasSource not set")
 	}
 	if sw.rateDelay != 500*time.Millisecond {
@@ -1075,6 +1083,9 @@ func TestSweepAll_CircuitBreaker(t *testing.T) {
 		return make([]byte, 32), nil
 	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		if account == (common.Address{}) {
+			return big.NewInt(0), nil // the destination, read by the final report
+		}
 		sweepCalls++
 		return nil, errors.New("rpc error")
 	}
@@ -1133,6 +1144,9 @@ func TestSweepAll_UnlimitedFailures(t *testing.T) {
 		return make([]byte, 32), nil
 	}
 	mock.balanceAtFn = func(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+		if account == (common.Address{}) {
+			return big.NewInt(0), nil // the destination, read by the final report
+		}
 		sweepCalls++
 		return nil, errors.New("rpc error")
 	}
@@ -1204,6 +1218,10 @@ func TestNewSweeper_SkipETH(t *testing.T) {
 	sw := NewSweeper(mock, PaymentTypeL1, common.Address{}, nil, nil, 0, 0, true, false, slog.New(slog.DiscardHandler))
 	if !sw.skipETH {
 		t.Fatal("skipETH not set")
+	}
+	// The balance query and the strategy both need it.
+	if direct, ok := sw.strategy.(*directStrategy); !ok || !direct.skipETH {
+		t.Fatal("skipETH not passed to the strategy")
 	}
 }
 
