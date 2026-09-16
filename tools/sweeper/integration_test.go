@@ -17,8 +17,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// TestIntegration_FullSweepFlow simulates a complete end-to-end sweep across
-// both Ethereum and zkSync networks with multiple keys, tokens, and gas funding.
+// TestIntegration_FullSweepFlow simulates a complete end-to-end sweep of both
+// payment types, each as its own execution, with multiple keys, tokens, and
+// gas funding.
 func TestIntegration_FullSweepFlow(t *testing.T) {
 	// Setup: Generate test keys and write them to a file.
 	key1, _ := crypto.GenerateKey()
@@ -111,22 +112,19 @@ func TestIntegration_FullSweepFlow(t *testing.T) {
 	ethMock := buildMock("eth", &ethTxsSent)
 	zkMock := buildMock("zk", &zkTxsSent)
 
-	sw := NewSweeper(
-		ethMock, zkMock,
-		destination,
-		[]common.Address{ethToken},
-		[]common.Address{zkToken},
-		gasSource,
-		0,
-		0,
-		false,
-		false,
-		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})),
-	)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// One execution per payment type, as the CLI does.
+	sweeps := []*Sweeper{
+		NewSweeper(ethMock, PaymentTypeL1, destination, []common.Address{ethToken}, gasSource, 0, 0, false, false, logger),
+		NewSweeper(zkMock, PaymentTypeL2, destination, []common.Address{zkToken}, gasSource, 0, 0, false, false, logger),
+	}
 
 	// Run the full sweep.
-	if err := sw.SweepAll(context.Background(), filtered); err != nil {
-		t.Fatalf("SweepAll: %v", err)
+	for _, sw := range sweeps {
+		if err := sw.SweepAll(context.Background(), filtered); err != nil {
+			t.Fatalf("SweepAll: %v", err)
+		}
 	}
 
 	// Verify transactions were sent on both networks.
@@ -155,7 +153,7 @@ func TestIntegration_EmptyKeysFile(t *testing.T) {
 	}
 
 	mock := fullMock()
-	sw := NewSweeper(mock, mock, common.Address{}, nil, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, PaymentTypeL1, common.Address{}, nil, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	if err := sw.SweepAll(context.Background(), keys); err != nil {
 		t.Fatalf("SweepAll: %v", err)
 	}
@@ -174,7 +172,7 @@ func TestIntegration_AllZeroBalances(t *testing.T) {
 	}
 
 	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
-	sw := NewSweeper(mock, mock, common.Address{}, []common.Address{token}, []common.Address{token}, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
+	sw := NewSweeper(mock, PaymentTypeL1, common.Address{}, []common.Address{token}, nil, 0, 0, false, false, slog.New(slog.DiscardHandler))
 	if err := sw.SweepAll(context.Background(), []KeyPair{kp}); err != nil {
 		t.Fatalf("SweepAll: %v", err)
 	}

@@ -25,14 +25,16 @@ type CLI struct {
 	Report ReportCmd `cmd:"" help:"Print the largest wallet balances and per-asset totals without transacting."`
 }
 
-// Common holds the flags every subcommand needs to reach the wallets.
+// Common holds the flags every subcommand needs to reach the wallets. Each
+// execution works on a single payment type, selected by --type: every type
+// settles on its own chain and needs its own transactions, so L1 and L2 are
+// handled by separate invocations.
 type Common struct {
-	Keys           string           `name:"keys" type:"existingfile" required:"" help:"Path to file of private keys (hex, no 0x prefix, one per line)."`
-	ETHEndpoint    string           `name:"eth-endpoint" required:"" help:"Ethereum L1 JSON-RPC endpoint."`
-	ZkSyncEndpoint string           `name:"zksync-endpoint" required:"" help:"zkSync Era JSON-RPC endpoint."`
-	ETHTokens      []common.Address `name:"eth-tokens" help:"Comma-separated list of ERC20 contract addresses on L1."`
-	ZkSyncTokens   []common.Address `name:"zksync-tokens" help:"Comma-separated list of ERC20 contract addresses on zkSync Era."`
-	FilterKeys     []common.Address `name:"filter-keys" help:"Comma-separated list of public addresses to restrict this command to."`
+	Keys       string              `name:"keys" type:"existingfile" required:"" help:"Path to file of private keys (hex, no 0x prefix, one per line)."`
+	Type       sweeper.PaymentType `name:"type" required:"" enum:"l1,l2" placeholder:"l1|l2" help:"Payment type to work on: l1 (Ethereum) or l2 (zkSync Era)."`
+	Endpoint   string              `name:"endpoint" required:"" help:"JSON-RPC endpoint of the payment type's chain."`
+	Tokens     []common.Address    `name:"tokens" help:"Comma-separated list of ERC20 contract addresses on the payment type's chain."`
+	FilterKeys []common.Address    `name:"filter-keys" help:"Comma-separated list of public addresses to restrict this command to."`
 }
 
 // RunCmd sweeps the deposit wallets into a single destination address.
@@ -60,15 +62,15 @@ func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
-	ethClient, zkClient, closeClients, err := c.connect(ctx, logger, c.ReceiptTimeout)
+	client, closeClient, err := c.connect(ctx, logger, c.ReceiptTimeout)
 	if err != nil {
 		return err
 	}
-	defer closeClients()
+	defer closeClient()
 
-	sw := sweeper.NewSweeper(ethClient, zkClient, c.Destination, c.ETHTokens, c.ZkSyncTokens, gasSource, c.RateDelay, c.MaxFailures, c.SkipETH, c.DryRun, logger)
+	sw := sweeper.NewSweeper(client, c.Type, c.Destination, c.Tokens, gasSource, c.RateDelay, c.MaxFailures, c.SkipETH, c.DryRun, logger)
 
-	logger.Info("starting sweep", "keys", len(keys), "ethTokens", len(c.ETHTokens), "zkTokens", len(c.ZkSyncTokens))
+	logger.Info("starting sweep", "network", c.Type.Network(), "keys", len(keys), "tokens", len(c.Tokens))
 
 	if err := sw.SweepAll(ctx, keys); err != nil {
 		return fmt.Errorf("sweep failed: %w", err)
@@ -93,16 +95,13 @@ func (c *ReportCmd) Run(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	// No transaction is sent, so the receipt timeout is irrelevant here.
-	ethClient, zkClient, closeClients, err := c.connect(ctx, logger, 0)
+	client, closeClient, err := c.connect(ctx, logger, 0)
 	if err != nil {
 		return err
 	}
-	defer closeClients()
+	defer closeClient()
 
-	reporter := sweeper.NewReporter([]sweeper.ReportNetwork{
-		{Name: "ethereum", Client: ethClient, Tokens: c.ETHTokens},
-		{Name: "zksync", Client: zkClient, Tokens: c.ZkSyncTokens},
-	}, c.Top, logger)
+	reporter := sweeper.NewReporter(client, c.Type, c.Tokens, c.Top, logger)
 
 	reports, err := reporter.Report(ctx, keys)
 	if err != nil {
@@ -127,31 +126,20 @@ func (c *Common) loadKeys(logger *slog.Logger) ([]sweeper.KeyPair, error) {
 	return keys, nil
 }
 
-// connect dials both endpoints and wraps them in retrying clients. The returned
-// function closes both connections.
-func (c *Common) connect(ctx context.Context, logger *slog.Logger, receiptTimeout time.Duration) (eth, zk *sweeper.RetryClient, closeClients func(), err error) {
-	ethClient, err := ethclient.DialContext(ctx, c.ETHEndpoint)
+// connect dials the endpoint and wraps it in a retrying client. The returned
+// function closes the connection.
+func (c *Common) connect(ctx context.Context, logger *slog.Logger, receiptTimeout time.Duration) (client *sweeper.RetryClient, closeClient func(), err error) {
+	rpc, err := ethclient.DialContext(ctx, c.Endpoint)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to connect to Ethereum endpoint: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to %s endpoint: %w", c.Type.Network(), err)
 	}
 
-	zkClient, err := ethclient.DialContext(ctx, c.ZkSyncEndpoint)
-	if err != nil {
-		ethClient.Close()
-		return nil, nil, nil, fmt.Errorf("failed to connect to zkSync endpoint: %w", err)
-	}
-
-	ethRetry := sweeper.NewRetryClient(ethClient, logger)
-	zkRetry := sweeper.NewRetryClient(zkClient, logger)
+	retry := sweeper.NewRetryClient(rpc, logger)
 	if receiptTimeout > 0 {
-		ethRetry.SetReceiptTimeout(receiptTimeout)
-		zkRetry.SetReceiptTimeout(receiptTimeout)
+		retry.SetReceiptTimeout(receiptTimeout)
 	}
 
-	return ethRetry, zkRetry, func() {
-		ethClient.Close()
-		zkClient.Close()
-	}, nil
+	return retry, rpc.Close, nil
 }
 
 // loadGasSource reads the gas funding key from path. An empty path means no
@@ -193,7 +181,7 @@ func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("sweeper"),
-		kong.Description("Sweep ETH and ERC20 balances from storjscan deposit wallets."),
+		kong.Description("Sweep ETH and ERC20 balances from storjscan deposit wallets. Each execution works on a single payment type, selected with --type."),
 		kong.UsageOnError(),
 		kong.TypeMapper(reflect.TypeOf(common.Address{}), addressMapper),
 		kong.BindTo(context.Background(), (*context.Context)(nil)),
