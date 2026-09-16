@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -106,7 +107,18 @@ func (r *RetryClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
 
 func (r *RetryClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	return retry(ctx, r, "EstimateGas", slog.LevelWarn, func() (uint64, error) {
-		return r.client.EstimateGas(ctx, msg)
+		gas, err := r.client.EstimateGas(ctx, msg)
+		if err != nil {
+			// Estimation runs the call, so it fails the same way CallContract
+			// does when the call reverts — and just as deterministically.
+			// Retrying only stalls the sweep on this wallet until the context
+			// is cancelled, when it should be recorded as a failure and the
+			// next wallet tried.
+			if isRevert(err) {
+				return 0, backoff.Permanent(err)
+			}
+		}
+		return gas, err
 	})
 }
 
@@ -127,15 +139,25 @@ func (r *RetryClient) CallContract(ctx context.Context, msg ethereum.CallMsg, bl
 	return retry(ctx, r, "CallContract", slog.LevelWarn, func() ([]byte, error) {
 		result, err := r.client.CallContract(ctx, msg, blockNumber)
 		if err != nil {
-			// Contract reverts (code 3) are deterministic — wrap as permanent so
-			// the retry loop exits immediately without logging a spurious retry.
-			var rpcErr rpc.Error
-			if errors.As(err, &rpcErr) && rpcErr.ErrorCode() == 3 {
+			// Contract reverts are deterministic — wrap as permanent so the
+			// retry loop exits immediately without logging a spurious retry.
+			if isRevert(err) {
 				return nil, backoff.Permanent(err)
 			}
 		}
 		return result, err
 	})
+}
+
+// isRevert reports whether an RPC error is the node saying the call reverted,
+// which no amount of retrying will change. Nodes answer with JSON-RPC error
+// code 3 ("execution reverted"); some report it in the message instead.
+func isRevert(err error) bool {
+	var rpcErr rpc.Error
+	if errors.As(err, &rpcErr) && rpcErr.ErrorCode() == 3 {
+		return true
+	}
+	return strings.Contains(err.Error(), "execution reverted")
 }
 
 func (r *RetryClient) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
