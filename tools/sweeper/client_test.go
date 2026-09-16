@@ -355,3 +355,88 @@ func TestNewRetryClient(t *testing.T) {
 
 // Verify RetryClient implements BlockchainClient.
 var _ BlockchainClient = (*RetryClient)(nil)
+
+// revertError is what a node returns when a call reverts: JSON-RPC error code 3.
+type revertError struct{ message string }
+
+func (e revertError) Error() string  { return e.message }
+func (e revertError) ErrorCode() int { return 3 }
+
+func TestRetryClient_EstimateGas_RevertIsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	mock := &mockClient{
+		estimateGasFn: func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+			calls.Add(1)
+			return 0, revertError{message: "execution reverted"}
+		},
+	}
+
+	rc := NewRetryClient(mock, testLogger())
+	_, err := rc.EstimateGas(context.Background(), ethereum.CallMsg{})
+	if err == nil {
+		t.Fatal("expected the revert to be returned")
+	}
+	// Retrying a revert would stall the sweep on this wallet instead of
+	// recording it as a failure and moving to the next one.
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("estimate was attempted %d times, want 1", got)
+	}
+}
+
+func TestRetryClient_EstimateGas_RevertWithoutErrorCode(t *testing.T) {
+	var calls atomic.Int32
+	mock := &mockClient{
+		estimateGasFn: func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+			calls.Add(1)
+			// Some providers report the revert in the message only.
+			return 0, errors.New("execution reverted: insufficient balance")
+		},
+	}
+
+	rc := NewRetryClient(mock, testLogger())
+	if _, err := rc.EstimateGas(context.Background(), ethereum.CallMsg{}); err == nil {
+		t.Fatal("expected the revert to be returned")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("estimate was attempted %d times, want 1", got)
+	}
+}
+
+func TestRetryClient_CallContract_RevertIsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	mock := &mockClient{
+		callContractFn: func(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+			calls.Add(1)
+			return nil, revertError{message: "execution reverted"}
+		},
+	}
+
+	rc := NewRetryClient(mock, testLogger())
+	if _, err := rc.CallContract(context.Background(), ethereum.CallMsg{}, nil); err == nil {
+		t.Fatal("expected the revert to be returned")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("call was attempted %d times, want 1", got)
+	}
+}
+
+func TestRetryClient_EstimateGas_TransientErrorIsRetried(t *testing.T) {
+	var calls atomic.Int32
+	mock := &mockClient{
+		estimateGasFn: func(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+			if calls.Add(1) < 3 {
+				return 0, errors.New("connection reset")
+			}
+			return 21000, nil
+		},
+	}
+
+	rc := NewRetryClient(mock, testLogger())
+	gas, err := rc.EstimateGas(context.Background(), ethereum.CallMsg{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gas != 21000 || calls.Load() != 3 {
+		t.Fatalf("got %d gas after %d attempts, want 21000 after 3", gas, calls.Load())
+	}
+}
