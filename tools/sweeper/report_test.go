@@ -275,7 +275,7 @@ func TestWriteReport(t *testing.T) {
 	}
 }
 
-func TestReporter_QueriesEveryNetwork(t *testing.T) {
+func TestReporter_QueriesConfiguredPaymentType(t *testing.T) {
 	token := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	keys := reportKeys(2)
 
@@ -296,17 +296,13 @@ func TestReporter_QueriesEveryNetwork(t *testing.T) {
 		}
 	}
 
-	reporter := NewReporter([]ReportNetwork{
-		{Name: "ethereum", Client: newClient(5, 7), Tokens: []common.Address{token}},
-		{Name: "zksync", Client: newClient(0, 0), Tokens: []common.Address{token}},
-	}, 10, testLogger())
-
-	reports, err := reporter.Report(context.Background(), keys)
+	l1 := NewReporter(newClient(5, 7), PaymentTypeL1, []common.Address{token}, 10, testLogger())
+	reports, err := l1.Report(context.Background(), keys)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reports) != 4 {
-		t.Fatalf("expected 4 reports (2 networks × 2 assets), got %d", len(reports))
+	if len(reports) != 2 {
+		t.Fatalf("expected 2 reports (ETH + 1 token), got %d", len(reports))
 	}
 
 	eth := findReport(t, reports, "ethereum", "ETH")
@@ -327,7 +323,13 @@ func TestReporter_QueriesEveryNetwork(t *testing.T) {
 		t.Errorf("ethereum token: holders = %d, total = %s; want 1 and 7", tok.Holders, tok.Total)
 	}
 
-	zk := findReport(t, reports, "zksync", "ETH")
+	// The same keys under the L2 payment type are reported with the L2 network name.
+	l2 := NewReporter(newClient(0, 0), PaymentTypeL2, []common.Address{token}, 10, testLogger())
+	zkReports, err := l2.Report(context.Background(), keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zk := findReport(t, zkReports, "zksync", "ETH")
 	if zk.Holders != 0 {
 		t.Errorf("zksync ETH holders = %d, want 0", zk.Holders)
 	}
@@ -339,7 +341,7 @@ func TestReporter_MulticallError(t *testing.T) {
 			return nil, errors.New("rpc down")
 		},
 	}
-	reporter := NewReporter([]ReportNetwork{{Name: "ethereum", Client: client}}, 10, testLogger())
+	reporter := NewReporter(client, PaymentTypeL1, nil, 10, testLogger())
 
 	_, err := reporter.Report(context.Background(), reportKeys(1))
 	if err == nil {

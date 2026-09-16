@@ -41,62 +41,56 @@ type AssetReport struct {
 	Top      []AddressBalance // largest holders first, at most topN entries
 }
 
-// ReportNetwork identifies one chain to report on.
-type ReportNetwork struct {
-	Name   string
-	Client BlockchainClient
-	Tokens []common.Address
-}
-
-// Reporter reads balances across networks and summarises them. It never sends
-// a transaction.
+// Reporter reads the balances relevant to one payment type and summarises
+// them. It never sends a transaction.
 type Reporter struct {
-	networks []ReportNetwork
-	topN     int
-	logger   *slog.Logger
+	client      BlockchainClient
+	paymentType PaymentType
+	tokens      []common.Address
+	topN        int
+	logger      *slog.Logger
 }
 
 // NewReporter creates a Reporter listing the topN largest holders per asset.
-func NewReporter(networks []ReportNetwork, topN int, logger *slog.Logger) *Reporter {
+func NewReporter(client BlockchainClient, paymentType PaymentType, tokens []common.Address, topN int, logger *slog.Logger) *Reporter {
 	return &Reporter{
-		networks: networks,
-		topN:     topN,
-		logger:   logger,
+		client:      client,
+		paymentType: paymentType,
+		tokens:      tokens,
+		topN:        topN,
+		logger:      logger,
 	}
 }
 
-// Report queries every configured network for the balances of keys and returns
-// one AssetReport per network asset.
+// Report queries the payment type's chain for the balances of keys and returns
+// one AssetReport per asset.
 func (r *Reporter) Report(ctx context.Context, keys []KeyPair) ([]AssetReport, error) {
 	addrs := make([]common.Address, len(keys))
 	for i, kp := range keys {
 		addrs[i] = kp.Address
 	}
 
-	var reports []AssetReport
-	for _, net := range r.networks {
-		r.logger.Info("querying balances via multicall", "network", net.Name, "wallets", len(addrs))
+	network := r.paymentType.Network()
+	r.logger.Info("querying balances via multicall", "network", network, "wallets", len(addrs))
 
-		// minETH is nil on purpose: a report should show the balances that are
-		// really there, including dust the sweeper would decline to move.
-		balances, err := MulticallBalances(ctx, r.logger, net.Client, addrs, net.Tokens, nil, false)
-		if err != nil {
-			return nil, fmt.Errorf("multicall %s balances: %w", net.Name, err)
-		}
-
-		decimals := make([]int, len(net.Tokens))
-		for i, token := range net.Tokens {
-			d, err := ERC20Decimals(ctx, net.Client, token)
-			if err != nil {
-				r.logger.Warn("failed to read token decimals, reporting raw units", "network", net.Name, "token", token.Hex(), "error", err)
-				d = UnknownDecimals
-			}
-			decimals[i] = d
-		}
-
-		reports = append(reports, BuildAssetReports(net.Name, keys, balances, net.Tokens, decimals, r.topN)...)
+	// minETH is nil on purpose: a report should show the balances that are
+	// really there, including dust the sweeper would decline to move.
+	balances, err := MulticallBalances(ctx, r.logger, r.client, addrs, r.tokens, nil, false)
+	if err != nil {
+		return nil, fmt.Errorf("multicall %s balances: %w", network, err)
 	}
-	return reports, nil
+
+	decimals := make([]int, len(r.tokens))
+	for i, token := range r.tokens {
+		d, err := ERC20Decimals(ctx, r.client, token)
+		if err != nil {
+			r.logger.Warn("failed to read token decimals, reporting raw units", "network", network, "token", token.Hex(), "error", err)
+			d = UnknownDecimals
+		}
+		decimals[i] = d
+	}
+
+	return BuildAssetReports(network, keys, balances, r.tokens, decimals, r.topN), nil
 }
 
 // BuildAssetReports turns raw per-wallet balances into one AssetReport per
