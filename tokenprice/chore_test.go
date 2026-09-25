@@ -20,7 +20,7 @@ import (
 
 func TestChore(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
-		service := tokenprice.NewService(zaptest.NewLogger(t), db.TokenPrice(), coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		service := tokenprice.NewCoinmarketcapPrice(zaptest.NewLogger(t), db.TokenPrice(), coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 		chore := tokenprice.NewChore(zaptest.NewLogger(t), service, time.Second*5)
 
 		defer ctx.Check(chore.Close)

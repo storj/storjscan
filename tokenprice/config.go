@@ -14,5 +14,6 @@ type Config struct {
 	Interval            time.Duration `help:"how often to run the chore" default:"1m" testDefault:"$TESTINTERVAL"`
 	PriceWindow         time.Duration `help:"max allowable duration between the requested and available ticker price timestamps" default:"1m" testDefault:"$TESTPRICEWINDOW"`
 	CoinmarketcapConfig coinmarketcap.Config
-	UseTestPrices       bool `help:"use test prices instead of coninmaketcap" default:"false"`
+	UseTestPrices       bool   `help:"use test prices instead of coninmaketcap" default:"false"`
+	FixedPrice          string `help:"fixed USD price of the token (e.g. 1 for USDC), used instead of coinmarketcap" default:""`
 }

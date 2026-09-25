@@ -9,11 +9,13 @@ import (
 	"net"
 	"strings"
 
+	"github.com/shopspring/decimal"
 	"github.com/spacemonkeygo/monkit/v3"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"storj.io/common/currency"
 	"storj.io/common/debug"
 	"storj.io/storj/private/lifecycle"
 	"storj.io/storjscan/api"
@@ -82,7 +84,7 @@ type App struct {
 	TokenPrice struct {
 		Chore        *tokenprice.Chore
 		CleanupChore *tokenPriceCleanup.Chore
-		Service      *tokenprice.Service
+		Service      tokenprice.Price
 	}
 
 	API struct {
@@ -117,25 +119,8 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 			db.Wallets(), config.Events)
 	}
 
-	{ // token price
-		var client tokenprice.Client
-		if config.TokenPrice.UseTestPrices {
-			client = coinmarketcap.NewTestClient()
-		} else {
-			client = coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
-		}
-		app.TokenPrice.Service = tokenprice.NewService(log.Named("tokenprice:service"), db.TokenPrice(), client, config.TokenPrice.PriceWindow)
-		app.TokenPrice.Chore = tokenprice.NewChore(log.Named("tokenprice:chore"), app.TokenPrice.Service, config.TokenPrice.Interval)
-
-		app.Services.Add(lifecycle.Item{
-			Name:  "tokenprice:chore",
-			Run:   app.TokenPrice.Chore.Run,
-			Close: app.TokenPrice.Chore.Close,
-		})
-	}
-
-	{ // tokens
-		var endpoints []common.EthEndpoint
+	var endpoints []common.EthEndpoint
+	{ // endpoints
 		err := json.Unmarshal([]byte(config.Tokens.Endpoints), &endpoints)
 		if err != nil {
 			return nil, err
@@ -145,7 +130,24 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 				return nil, errs.New("invalid token currency %q for endpoint %q: %v", endpoint.Currency, endpoint.Name, err)
 			}
 		}
+	}
 
+	{ // token price
+		var err error
+		app.TokenPrice.Service, app.TokenPrice.Chore, err = newTokenPrice(log, config.TokenPrice, db.TokenPrice(), endpoints)
+		if err != nil {
+			return nil, err
+		}
+		if app.TokenPrice.Chore != nil {
+			app.Services.Add(lifecycle.Item{
+				Name:  "tokenprice:chore",
+				Run:   app.TokenPrice.Chore.Run,
+				Close: app.TokenPrice.Chore.Close,
+			})
+		}
+	}
+
+	{ // tokens
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			endpoints,
 			app.Blockchain.HeadersCache,
@@ -217,6 +219,59 @@ func (app *App) Close() error {
 	errList.Add(app.Servers.Close())
 	errList.Add(app.Services.Close())
 	return errList.Err()
+}
+
+// newTokenPrice creates the configured token price service. Either fixed price or
+// coinmarketcap should be configured. The chore is nil when it's not required.
+func newTokenPrice(log *zap.Logger, config tokenprice.Config, db tokenprice.PriceQuoteDB, endpoints []common.EthEndpoint) (tokenprice.Price, *tokenprice.Chore, error) {
+	fixedConfigured := config.FixedPrice != ""
+	coinmarketcapConfigured := config.UseTestPrices || config.CoinmarketcapConfig.APIKey != ""
+
+	switch {
+	case fixedConfigured && coinmarketcapConfigured:
+		return nil, nil, errs.New("both fixed token price and coinmarketcap are configured, only one of them can be used")
+	case fixedConfigured:
+		price, err := decimal.NewFromString(config.FixedPrice)
+		if err != nil {
+			return nil, nil, errs.New("invalid fixed token price %q: %v", config.FixedPrice, err)
+		}
+		if !price.IsPositive() {
+			return nil, nil, errs.New("fixed token price must be positive: %q", config.FixedPrice)
+		}
+		if err := checkFixedPriceEndpoints(endpoints); err != nil {
+			return nil, nil, err
+		}
+		log.Info("using fixed token price", zap.String("USD", price.String()))
+		return tokenprice.NewFixedPrice(currency.AmountFromDecimal(price, currency.USDollarsMicro)), nil, nil
+	case coinmarketcapConfigured:
+		var client tokenprice.Client
+		if config.UseTestPrices {
+			log.Info("using coinmarketcap test token prices")
+			client = coinmarketcap.NewTestClient()
+		} else {
+			log.Info("using coinmarketcap token price", zap.String("URL", config.CoinmarketcapConfig.BaseURL))
+			client = coinmarketcap.NewClient(config.CoinmarketcapConfig)
+		}
+		service := tokenprice.NewCoinmarketcapPrice(log.Named("tokenprice:service"), db, client, config.PriceWindow)
+		return service, tokenprice.NewChore(log.Named("tokenprice:chore"), service, config.Interval), nil
+	default:
+		return nil, nil, errs.New("token price is not configured: either fixed price or coinmarketcap API key should be set")
+	}
+}
+
+// checkFixedPriceEndpoints returns an error if any of the endpoints uses a token
+// which can't be valued with a fixed price.
+func checkFixedPriceEndpoints(endpoints []common.EthEndpoint) error {
+	for _, endpoint := range endpoints {
+		tokenCurrency, err := endpoint.TokenCurrency()
+		if err != nil {
+			return err
+		}
+		if tokenCurrency != currency.USDC {
+			return errs.New("coinmarketcap is required for %s token (endpoint %q), fixed price is only allowed for USDC", tokenCurrency.Symbol(), endpoint.Name)
+		}
+	}
+	return nil
 }
 
 func getKeyBytes(keys []string) (map[string]string, error) {

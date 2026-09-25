@@ -21,13 +21,13 @@ var ErrChore = errs.Class("Chore")
 // architecture: Chore
 type Chore struct {
 	log     *zap.Logger
-	service *Service
+	service *CoinmarketcapPrice
 
 	Loop *sync2.Cycle
 }
 
 // NewChore creates new chore for saving storj ticker price to local DB.
-func NewChore(log *zap.Logger, service *Service, interval time.Duration) *Chore {
+func NewChore(log *zap.Logger, service *CoinmarketcapPrice, interval time.Duration) *Chore {
 
 	return &Chore{
 		log:     log,

@@ -65,7 +65,7 @@ func testEndpoint(t *testing.T, connStr string) {
 			ChainReorgBuffer: 15,
 			MaximumQuerySize: 10000,
 		})
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
+		tokenPrice := tokenprice.NewCoinmarketcapPrice(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)

@@ -34,7 +34,7 @@ type Service struct {
 	endpoints    []common.EthEndpoint
 	headersCache *blockchain.HeadersCache
 	events       *events.Service
-	tokenPrice   *tokenprice.Service
+	tokenPrice   tokenprice.Price
 }
 
 // NewService creates new token service instance.
@@ -43,7 +43,7 @@ func NewService(
 	endpoints []common.EthEndpoint,
 	headersCache *blockchain.HeadersCache,
 	events *events.Service,
-	tokenPrice *tokenprice.Service) *Service {
+	tokenPrice tokenprice.Price) *Service {
 	return &Service{
 		log:          log,
 		endpoints:    endpoints,

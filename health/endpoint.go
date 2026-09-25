@@ -24,7 +24,7 @@ var mon = monkit.Package()
 type Endpoint struct {
 	log          *zap.Logger
 	db           Pingable
-	tokenPrice   *tokenprice.Service
+	tokenPrice   tokenprice.Price
 	tokenService *tokens.Service
 }
 
@@ -34,7 +34,7 @@ type Pingable interface {
 }
 
 // NewEndpoint creates a new endpoint instance for the health checker.
-func NewEndpoint(log *zap.Logger, db Pingable, tokenPrice *tokenprice.Service, tokenService *tokens.Service) *Endpoint {
+func NewEndpoint(log *zap.Logger, db Pingable, tokenPrice tokenprice.Price, tokenService *tokens.Service) *Endpoint {
 	return &Endpoint{
 		log:          log,
 		db:           db,
