@@ -24,6 +24,7 @@ func GetConfig(t *testing.T) coinmarketcap.Config {
 		Timeout: time.Second * 5,
 		BaseURL: TestURLEndpoint,
 		APIKey:  PickAPIKey(t),
+		TokenID: "1772",
 	}
 }
 

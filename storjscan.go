@@ -122,6 +122,9 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		if config.TokenPrice.UseTestPrices {
 			client = coinmarketcap.NewTestClient()
 		} else {
+			if config.TokenPrice.CoinmarketcapConfig.TokenID == "" {
+				return nil, errs.New("coinmarketcap token ID is not configured (e.g. 1772 for STORJ)")
+			}
 			client = coinmarketcap.NewClient(config.TokenPrice.CoinmarketcapConfig)
 		}
 		app.TokenPrice.Service = tokenprice.NewService(log.Named("tokenprice:service"), db.TokenPrice(), client, config.TokenPrice.PriceWindow)
@@ -138,6 +141,9 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		var endpoints []common.EthEndpoint
 		err := json.Unmarshal([]byte(config.Tokens.Endpoints), &endpoints)
 		if err != nil {
+			return nil, err
+		}
+		if err := common.ValidateEndpoints(endpoints); err != nil {
 			return nil, err
 		}
 
@@ -197,6 +203,11 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 // Run runs storjscan until it's either closed or it errors.
 func (app *App) Run(ctx context.Context) (err error) {
 	defer mon.Task()(&ctx)(&err)
+
+	err = app.Tokens.Service.VerifyDecimals(ctx)
+	if err != nil {
+		return err
+	}
 
 	group, ctx := errgroup.WithContext(ctx)
 

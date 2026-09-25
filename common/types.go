@@ -6,6 +6,8 @@ package common
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/zeebo/errs"
+
+	"storj.io/common/currency"
 )
 
 // EthEndpoint contains the URL and contract address to access a chain API.
@@ -14,6 +16,38 @@ type EthEndpoint struct {
 	URL      string `json:"url"`
 	Contract string `json:"contract"`
 	ChainID  int64  `json:"chainId,string,omitempty"`
+	// Currency is the symbol of the token (e.g. STORJ, USDC).
+	Currency string `json:"currency,omitempty"`
+}
+
+// TokenCurrency returns the currency of the token contract.
+func (endpoint EthEndpoint) TokenCurrency() (*currency.Currency, error) {
+	if endpoint.Currency == "" {
+		return nil, errs.New("token currency is not configured for endpoint %q", endpoint.Name)
+	}
+	return currency.FromSymbol(endpoint.Currency)
+}
+
+// ValidateEndpoints checks that every endpoint has a valid token currency and
+// all endpoints use the same currency. Token prices are not tracked per
+// currency, therefore mixing currencies would produce wrong USD values.
+func ValidateEndpoints(endpoints []EthEndpoint) error {
+	var first *currency.Currency
+	for _, endpoint := range endpoints {
+		tokenCurrency, err := endpoint.TokenCurrency()
+		if err != nil {
+			return errs.New("invalid token currency %q for endpoint %q: %v", endpoint.Currency, endpoint.Name, err)
+		}
+		if first == nil {
+			first = tokenCurrency
+			continue
+		}
+		if tokenCurrency.Symbol() != first.Symbol() {
+			return errs.New("endpoint %q uses currency %s, but other endpoints use %s: only one currency is supported",
+				endpoint.Name, tokenCurrency.Symbol(), first.Symbol())
+		}
+	}
+	return nil
 }
 
 // Address is wallet address on eth chain.

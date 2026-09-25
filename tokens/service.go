@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
@@ -16,6 +17,7 @@ import (
 	"storj.io/storjscan/blockchain/events"
 	"storj.io/storjscan/common"
 	"storj.io/storjscan/tokenprice"
+	"storj.io/storjscan/tokens/erc20"
 )
 
 // ErrService - tokens service error class.
@@ -23,7 +25,7 @@ var ErrService = errs.Class("tokens service")
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1'}]"`
+	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>,Currency:<Token symbol, e.g. STORJ or USDC>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1'}]"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.
@@ -152,6 +154,50 @@ func ping(ctx context.Context, endpoint common.EthEndpoint) (err error) {
 		return err
 	}
 	return err
+}
+
+// VerifyDecimals checks that the decimals of the configured currency match the
+// decimals of the token contract for every endpoint.
+func (service *Service) VerifyDecimals(ctx context.Context) (err error) {
+	defer mon.Task()(&ctx)(&err)
+
+	for _, endpoint := range service.endpoints {
+		tokenCurrency, err := endpoint.TokenCurrency()
+		if err != nil {
+			return ErrService.Wrap(err)
+		}
+		err = verifyDecimals(ctx, endpoint, tokenCurrency)
+		if err != nil {
+			return ErrService.Wrap(err)
+		}
+	}
+	return nil
+}
+
+func verifyDecimals(ctx context.Context, endpoint common.EthEndpoint, tokenCurrency *currency.Currency) (err error) {
+	client, err := ethclient.DialContext(ctx, endpoint.URL)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	contractAddress, err := common.AddressFromHex(endpoint.Contract)
+	if err != nil {
+		return err
+	}
+	token, err := erc20.NewERC20(contractAddress, client)
+	if err != nil {
+		return err
+	}
+	decimals, err := token.Decimals(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return errs.New("failed to get decimals of token contract %s (endpoint %q): %v", endpoint.Contract, endpoint.Name, err)
+	}
+	if int32(decimals) != tokenCurrency.DecimalPlaces() {
+		return errs.New("token contract %s (endpoint %q) has %d decimals, but the configured currency %s has %d",
+			endpoint.Contract, endpoint.Name, decimals, tokenCurrency.Symbol(), tokenCurrency.DecimalPlaces())
+	}
+	return nil
 }
 
 // GetChainIds returns the chain ids of the currently configured endpoints.

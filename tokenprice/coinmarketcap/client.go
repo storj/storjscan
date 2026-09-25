@@ -20,8 +20,6 @@ import (
 var ErrClient = errs.Class("Client")
 
 const (
-	// storjID is the permanent CoinMarketCap ID associated with STORJ token.
-	storjID = "1772"
 	// usdSymbol is the ticker symbol for U.S. Dollars.
 	usdSymbol = "USD"
 )
@@ -31,14 +29,16 @@ type Config struct {
 	BaseURL string        `help:"base URL for ticker price API" default:"https://pro-api.coinmarketcap.com" testDefault:"$TESTBASEURL"`
 	APIKey  string        `help:"API Key used to access coinmarketcap" default:"" testDefault:"$TESTAPIKEY"`
 	Timeout time.Duration `help:"coinmarketcap API response timeout" default:"10s" testDefault:"$TESTTIMEOUT"`
+	TokenID string        `help:"permanent coinmarketcap ID of the token (e.g. 1772 for STORJ)" default:"" testDefault:"1772"`
 }
 
-// Client is used to query the coinmarketcap API for the STORJ token price.
+// Client is used to query the coinmarketcap API for the token price.
 // implements tokenprice.Client interface.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
 	apiKey     string
+	tokenID    string
 }
 
 // NewClient returns a new token price client.
@@ -49,6 +49,7 @@ func NewClient(config Config) *Client {
 		},
 		baseURL: config.BaseURL,
 		apiKey:  config.APIKey,
+		tokenID: config.TokenID,
 	}
 }
 
@@ -56,7 +57,7 @@ func NewClient(config Config) *Client {
 // todo - verify fields in status, and add alerts.
 func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount, error) {
 	q := url.Values{}
-	q.Add("id", storjID)
+	q.Add("id", c.tokenID)
 	q.Add("convert", usdSymbol)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v2/cryptocurrency/quotes/latest", nil)
@@ -88,12 +89,12 @@ func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount
 		return time.Time{}, currency.Amount{}, ErrClient.New("unexpected status code: %d", resp.StatusCode)
 	}
 
-	timestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data[storjID].Quote[usdSymbol].LastUpdated)
+	timestamp, err := time.Parse(time.RFC3339Nano, formattedResp.Data[c.tokenID].Quote[usdSymbol].LastUpdated)
 	if err != nil {
 		return time.Time{}, currency.Amount{}, ErrClient.Wrap(err)
 	}
 
-	amount := currency.AmountFromDecimal(formattedResp.Data[storjID].Quote[usdSymbol].Price, currency.USDollarsMicro)
+	amount := currency.AmountFromDecimal(formattedResp.Data[c.tokenID].Quote[usdSymbol].Price, currency.USDollarsMicro)
 	return timestamp, amount, nil
 }
 
@@ -101,7 +102,7 @@ func (c *Client) GetLatestPrice(ctx context.Context) (time.Time, currency.Amount
 // todo - verify fields in status, and add alerts.
 func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (time.Time, currency.Amount, error) {
 	q := url.Values{}
-	q.Add("id", storjID)
+	q.Add("id", c.tokenID)
 	q.Add("convert", usdSymbol)
 	q.Add("time_end", strconv.FormatInt(requestedTimestamp.UnixMilli(), 10))
 
@@ -149,7 +150,7 @@ func (c *Client) GetPriceAt(ctx context.Context, requestedTimestamp time.Time) (
 // Ping checks that the coinmarketcap third-party api is available for use.
 func (c *Client) Ping(ctx context.Context) (statusCode int, err error) {
 	q := url.Values{}
-	q.Add("id", storjID)
+	q.Add("id", c.tokenID)
 	q.Add("convert", usdSymbol)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/key/info", nil)
