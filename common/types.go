@@ -6,6 +6,8 @@ package common
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/zeebo/errs"
+
+	"storj.io/common/currency"
 )
 
 // EthEndpoint contains the URL and contract address to access a chain API.
@@ -14,6 +16,16 @@ type EthEndpoint struct {
 	URL      string `json:"url"`
 	Contract string `json:"contract"`
 	ChainID  int64  `json:"chainId,string,omitempty"`
+	// Currency is the symbol of the token (e.g. STORJ, USDC).
+	Currency string `json:"currency,omitempty"`
+}
+
+// TokenCurrency returns the currency of the token contract.
+func (endpoint EthEndpoint) TokenCurrency() (*currency.Currency, error) {
+	if endpoint.Currency == "" {
+		return nil, errs.New("token currency is not configured for endpoint %q", endpoint.Name)
+	}
+	return currency.FromSymbol(endpoint.Currency)
 }
 
 // Address is wallet address on eth chain.

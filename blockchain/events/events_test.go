@@ -48,7 +48,7 @@ func testEventsService(t *testing.T, connStr string) {
 			t.Fatal(err)
 		}
 
-		jsonEndpoint := `[{"Name":"Geth", "URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `"}]`
+		jsonEndpoint := `[{"Name":"Geth", "URL": "` + network.HTTPEndpoint() + `", "Contract": "` + network.TokenAddress().Hex() + `", "ChainID": "` + fmt.Sprint(network.ChainID()) + `", "Currency": "STORJ"}]`
 		var ethEndpoints []common.EthEndpoint
 		err = json.Unmarshal([]byte(jsonEndpoint), &ethEndpoints)
 		require.NoError(t, err)

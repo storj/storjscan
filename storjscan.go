@@ -140,6 +140,11 @@ func NewApp(log *zap.Logger, config Config, db DB) (*App, error) {
 		if err != nil {
 			return nil, err
 		}
+		for _, endpoint := range endpoints {
+			if _, err := endpoint.TokenCurrency(); err != nil {
+				return nil, errs.New("invalid token currency %q for endpoint %q: %v", endpoint.Currency, endpoint.Name, err)
+			}
+		}
 
 		app.Tokens.Service = tokens.NewService(log.Named("tokens:service"),
 			endpoints,

@@ -23,7 +23,7 @@ var ErrService = errs.Class("tokens service")
 
 // Config holds tokens service configuration.
 type Config struct {
-	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1'}]"`
+	Endpoints string `help:"List of RPC endpoints [{Name:<Name>,URL:<URL>,Contract:<Contract Address>,ChainID:<Chain ID>,Currency:<Token symbol, e.g. STORJ or USDC>},...]" devDefault:"[{'Name':'Geth','URL':'http://localhost:8545','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1337','Currency':'STORJ'}]" releaseDefault:"[{'Name':'Ethereum Mainnet','URL':'/home/storj/.ethereum/geth.ipc','Contract':'0xb64ef51c888972c908cfacf59b47c1afbc0ab8ac','ChainID':'1','Currency':'STORJ'}]"`
 }
 
 // Service for querying ERC20 token information from ethereum chain.

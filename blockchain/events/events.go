@@ -123,6 +123,10 @@ func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common
 	if err != nil {
 		return nil, err
 	}
+	tokenCurrency, err := endpoint.TokenCurrency()
+	if err != nil {
+		return nil, err
+	}
 	token, err := erc20.NewERC20(contractAdress, client)
 	if err != nil {
 		events.log.Error("failed to bind to ERC20 contract", zap.String("Contract", contractAdress.Hex()), zap.String("URL", endpoint.URL))
@@ -155,7 +159,7 @@ func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common
 				addresses = append(addresses, walletsList[a])
 			}
 
-			batchEvents, err := events.processBatch(token, opts, addresses, endpoint.ChainID)
+			batchEvents, err := events.processBatch(token, opts, addresses, endpoint.ChainID, tokenCurrency)
 			if err != nil {
 				return nil, err
 			}
@@ -165,7 +169,7 @@ func (events *Service) getEventsForEndpoint(ctx context.Context, endpoint common
 	return newEvents, nil
 }
 
-func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID int64) ([]TransferEvent, error) {
+func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, addresses []common.Address, chainID int64, tokenCurrency *currency.Currency) ([]TransferEvent, error) {
 	iter, err := token.FilterTransfer(opts, nil, addresses)
 	if err != nil {
 		events.log.Error("failed to search for transfer events", zap.Int64("Chain ID", chainID))
@@ -183,7 +187,7 @@ func (events *Service) processBatch(token *erc20.ERC20, opts *bind.FilterOpts, a
 			zap.Uint64("Block Number", iter.Event.Raw.BlockNumber),
 			zap.Int("Log Index", int(iter.Event.Raw.Index)),
 		)
-		tokenValue := currency.AmountFromBaseUnits(iter.Event.Value.Int64(), currency.StorjToken)
+		tokenValue := currency.AmountFromBaseUnits(iter.Event.Value.Int64(), tokenCurrency)
 		newEvents = append(newEvents, TransferEvent{
 			ChainID:     chainID,
 			From:        iter.Event.From,
