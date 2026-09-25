@@ -129,7 +129,7 @@ func testPayments(t *testing.T, connStr string) {
 			ChainReorgBuffer: 15,
 			MaximumQuerySize: 10000,
 		})
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
+		tokenPrice := tokenprice.NewCoinmarketcapPrice(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 		service := tokens.NewService(logger, ethEndpoints, headersCache, events, tokenPrice)
 
 		// add the wallet to the DB
@@ -217,7 +217,7 @@ func testPaymentsUSDC(t *testing.T, connStr string) {
 			ChainReorgBuffer: 15,
 			MaximumQuerySize: 10000,
 		})
-		tokenPrice := tokenprice.NewService(logger, db.TokenPrice(), coinmarketcap.NewTestClient(), time.Minute)
+		tokenPrice := tokenprice.NewFixedPrice(currency.AmountFromBaseUnits(1000000, currency.USDollarsMicro))
 		service := tokens.NewService(logger, ethEndpoints, headersCache, events, tokenPrice)
 
 		payments, err := service.Payments(ctx, accs[1].Address, nil)
@@ -352,7 +352,7 @@ func testAllPayments(t *testing.T, connStr string) {
 			ChainReorgBuffer: 15,
 			MaximumQuerySize: 10000,
 		})
-		tokenPrice := tokenprice.NewService(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
+		tokenPrice := tokenprice.NewCoinmarketcapPrice(logger, tokenPriceDB, coinmarketcap.NewTestClient(), time.Minute)
 		service := tokens.NewService(logger, ethEndpoints, headersCache, events, tokenPrice)
 
 		currentHead, err := client.HeaderByNumber(ctx, nil)

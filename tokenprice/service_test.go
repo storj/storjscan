@@ -4,6 +4,7 @@
 package tokenprice_test
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestServicePriceAt(t *testing.T) {
 		price := currency.AmountFromBaseUnits(10, currency.USDollarsMicro)
 		require.NoError(t, tokenPriceDB.Update(ctx, now, price.BaseUnits()))
 
-		service := tokenprice.NewService(log, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		service := tokenprice.NewCoinmarketcapPrice(log, tokenPriceDB, coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 
 		t.Run("price is in safe range", func(t *testing.T) {
 			p, err := service.PriceAt(ctx, now.Add(time.Second))
@@ -62,10 +63,24 @@ func TestServicePriceAtEmptyDB(t *testing.T) {
 	storjscandbtest.Run(t, func(ctx *testcontext.Context, t *testing.T, db *storjscandbtest.DB) {
 		log := zaptest.NewLogger(t)
 
-		service := tokenprice.NewService(log, db.TokenPrice(), coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
+		service := tokenprice.NewCoinmarketcapPrice(log, db.TokenPrice(), coinmarketcap.NewClient(coinmarketcaptest.GetConfig(t)), time.Minute)
 
 		p, err := service.PriceAt(ctx, time.Now())
 		require.NoError(t, err)
 		require.NotZero(t, p)
 	})
+}
+
+func TestFixedPrice(t *testing.T) {
+	ctx := testcontext.New(t)
+	price := currency.AmountFromBaseUnits(1000000, currency.USDollarsMicro)
+	service := tokenprice.NewFixedPrice(price)
+
+	p, err := service.PriceAt(ctx, time.Now().Add(-24*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, price, p)
+
+	sc, err := service.Ping(ctx)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, sc)
 }
