@@ -98,6 +98,87 @@ func TestLoadKeys_FileNotFound(t *testing.T) {
 	}
 }
 
+func TestLoadFilterAddresses_Valid(t *testing.T) {
+	pk1, _ := crypto.GenerateKey()
+	pk2, _ := crypto.GenerateKey()
+	addr1 := crypto.PubkeyToAddress(pk1.PublicKey)
+	addr2 := crypto.PubkeyToAddress(pk2.PublicKey)
+
+	path := writeTestFile(t, addr1.Hex()+"\n"+addr2.Hex()+"\n")
+	addrs, err := LoadFilterAddresses(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 2 {
+		t.Fatalf("expected 2 addresses, got %d", len(addrs))
+	}
+	if addrs[0] != addr1 {
+		t.Fatalf("first address mismatch")
+	}
+	if addrs[1] != addr2 {
+		t.Fatalf("second address mismatch")
+	}
+}
+
+func TestLoadFilterAddresses_LowercaseNoPrefx(t *testing.T) {
+	pk, _ := crypto.GenerateKey()
+	addr := crypto.PubkeyToAddress(pk.PublicKey)
+	// Write lowercase without 0x prefix.
+	hexStr := fmt.Sprintf("%x", addr.Bytes())
+
+	path := writeTestFile(t, hexStr+"\n")
+	addrs, err := LoadFilterAddresses(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 1 {
+		t.Fatalf("expected 1 address, got %d", len(addrs))
+	}
+	if addrs[0] != addr {
+		t.Fatalf("address mismatch: got %s, want %s", addrs[0].Hex(), addr.Hex())
+	}
+}
+
+func TestLoadFilterAddresses_EmptyLines(t *testing.T) {
+	pk, _ := crypto.GenerateKey()
+	addr := crypto.PubkeyToAddress(pk.PublicKey)
+
+	path := writeTestFile(t, "\n\n"+addr.Hex()+"\n\n")
+	addrs, err := LoadFilterAddresses(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 1 {
+		t.Fatalf("expected 1 address, got %d", len(addrs))
+	}
+}
+
+func TestLoadFilterAddresses_InvalidAddress(t *testing.T) {
+	path := writeTestFile(t, "not-a-valid-address\n")
+	_, err := LoadFilterAddresses(path)
+	if err == nil {
+		t.Fatal("expected error for invalid address")
+	}
+}
+
+func TestLoadFilterAddresses_EmptyFile(t *testing.T) {
+	path := writeTestFile(t, "")
+	addrs, err := LoadFilterAddresses(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(addrs) != 0 {
+		t.Fatalf("expected 0 addresses, got %d", len(addrs))
+	}
+}
+
+func TestLoadFilterAddresses_FileNotFound(t *testing.T) {
+	_, err := LoadFilterAddresses("/nonexistent/path/filter.txt")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
 func TestFilterKeys_MatchSome(t *testing.T) {
 	pk1, _ := crypto.GenerateKey()
 	pk2, _ := crypto.GenerateKey()
