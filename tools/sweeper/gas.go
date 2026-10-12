@@ -18,9 +18,19 @@ import (
 // consecutive full blocks instead of going stale after one.
 const baseFeeWiggleMultiplier = 2
 
+// minGasTipCapper is implemented by a client configured with a floor for the
+// priority fee, see RetryClient.SetMinGasTipCap.
+type minGasTipCapper interface {
+	MinGasTipCap() *big.Int
+}
+
 // suggestGasFees fetches the EIP-1559 gas fee cap and tip cap from the network.
 //
-// gasTipCap is the priority fee suggested by the node. gasFeeCap is
+// gasTipCap is the priority fee suggested by the node, raised to the client's
+// minimum if it has one: on a quiet chain nodes suggest a tip of 0, and a
+// transaction that pays the validator nothing can sit unmined until the receipt
+// wait times out, holding up every later transaction from the same sender
+// behind its nonce. gasFeeCap is
 // gasTipCap + baseFee*baseFeeWiggleMultiplier, the same formula go-ethereum's
 // bind package uses. The base fee is derived from the two suggestions
 // (eth_gasPrice returns baseFee + tip on EIP-1559 networks), so no extra RPC
@@ -45,6 +55,15 @@ func suggestGasFees(ctx context.Context, client BlockchainClient) (gasFeeCap, ga
 		// block boundary); there is no base fee to add headroom for.
 		baseFee.SetInt64(0)
 	}
+
+	// The base fee above is derived from the node's own tip, so the floor is
+	// applied only now.
+	if floor, ok := client.(minGasTipCapper); ok {
+		if minTip := floor.MinGasTipCap(); minTip != nil && gasTipCap.Cmp(minTip) < 0 {
+			gasTipCap = new(big.Int).Set(minTip)
+		}
+	}
+
 	baseFee.Mul(baseFee, big.NewInt(baseFeeWiggleMultiplier))
 	gasFeeCap = new(big.Int).Add(gasTipCap, baseFee)
 
