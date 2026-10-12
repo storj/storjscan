@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/big"
 	"os"
 	"reflect"
 	"strings"
@@ -50,6 +52,7 @@ type RunCmd struct {
 	SkipETH         bool           `name:"skip-eth" help:"Skip sweeping ETH, only sweep ERC20 tokens."`
 	DryRun          bool           `name:"dry-run" help:"Print estimated recoverable balances and gas costs without sending any transactions."`
 	ReceiptTimeout  time.Duration  `name:"receipt-timeout" default:"30m" help:"Maximum time to wait for a transaction to be mined."`
+	MinPriorityFee  float64        `name:"min-priority-fee" default:"0.005" help:"Lowest priority fee (tip) in gwei to bid with, even when the node suggests less. Nodes suggest 0 on a quiet chain, which can leave transactions unmined."`
 }
 
 // Run executes the sweep.
@@ -68,6 +71,7 @@ func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer closeClient()
+	client.SetMinGasTipCap(gweiToWei(c.MinPriorityFee))
 
 	var sw *sweeper.Sweeper
 	if c.Type == sweeper.PaymentTypeL17702 {
@@ -103,6 +107,9 @@ func (c *RunCmd) Run(ctx context.Context, logger *slog.Logger) error {
 // so a flag landing in the wrong mode usually means the sweep would not do what
 // was asked.
 func (c *RunCmd) validate() error {
+	if c.MinPriorityFee < 0 {
+		return fmt.Errorf("--min-priority-fee must not be negative")
+	}
 	if c.Type != sweeper.PaymentTypeL17702 {
 		if c.SweeperContract != (common.Address{}) {
 			return fmt.Errorf("--sweeper-contract only applies to --type %s", sweeper.PaymentTypeL17702)
@@ -188,6 +195,11 @@ func (c *Common) connect(ctx context.Context, logger *slog.Logger, receiptTimeou
 	}
 
 	return retry, rpc.Close, nil
+}
+
+// gweiToWei converts a gwei amount to wei, rounded to the nearest wei.
+func gweiToWei(gwei float64) *big.Int {
+	return big.NewInt(int64(math.Round(gwei * 1e9)))
 }
 
 // loadGasSource reads the gas funding key from path. An empty path means no

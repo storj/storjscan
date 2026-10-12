@@ -86,6 +86,49 @@ func TestSuggestGasFees_NeverBelowSuggestion(t *testing.T) {
 	}
 }
 
+// TestSuggestGasFees_MinTipFloor covers a quiet chain where the node suggests a
+// tip of 0: the configured floor must replace it, and the fee cap must still
+// carry the base fee headroom on top of the raised tip.
+func TestSuggestGasFees_MinTipFloor(t *testing.T) {
+	baseFee := big.NewInt(110_000_000) // 0.11 gwei
+	minTip := big.NewInt(50_000_000)   // 0.05 gwei
+
+	newClient := func(tip *big.Int) *RetryClient {
+		client := NewRetryClient(&mockClient{
+			suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {
+				return new(big.Int).Add(baseFee, tip), nil
+			},
+			suggestGasTipCapFn: func(ctx context.Context) (*big.Int, error) {
+				return tip, nil
+			},
+		}, testLogger())
+		client.SetMinGasTipCap(minTip)
+		return client
+	}
+
+	gasFeeCap, gasTipCap, err := suggestGasFees(context.Background(), newClient(big.NewInt(0)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gasTipCap.Cmp(minTip) != 0 {
+		t.Fatalf("expected gasTipCap raised to %s, got %s", minTip, gasTipCap)
+	}
+	want := new(big.Int).Add(minTip, new(big.Int).Mul(baseFee, big.NewInt(2)))
+	if gasFeeCap.Cmp(want) != 0 {
+		t.Fatalf("expected gasFeeCap %s, got %s", want, gasFeeCap)
+	}
+
+	// A suggestion above the floor is kept as is.
+	highTip := big.NewInt(2_000_000_000)
+	_, gasTipCap, err = suggestGasFees(context.Background(), newClient(highTip))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gasTipCap.Cmp(highTip) != 0 {
+		t.Fatalf("expected gasTipCap %s, got %s", highTip, gasTipCap)
+	}
+}
+
 func TestEstimateSweepGas_ETHOnly(t *testing.T) {
 	mock := &mockClient{
 		suggestGasPriceFn: func(ctx context.Context) (*big.Int, error) {

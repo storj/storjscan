@@ -37,6 +37,7 @@ type RetryClient struct {
 	client         BlockchainClient
 	logger         *slog.Logger
 	receiptTimeout time.Duration
+	minGasTipCap   *big.Int
 }
 
 // NewRetryClient creates a new RetryClient wrapping the given BlockchainClient.
@@ -51,6 +52,17 @@ func NewRetryClient(client BlockchainClient, logger *slog.Logger) *RetryClient {
 // SetReceiptTimeout sets the maximum time to wait for a transaction receipt.
 func (r *RetryClient) SetReceiptTimeout(d time.Duration) {
 	r.receiptTimeout = d
+}
+
+// SetMinGasTipCap sets the lowest priority fee, in wei, the sweep bids with,
+// whatever the node suggests. nil means no floor.
+func (r *RetryClient) SetMinGasTipCap(tip *big.Int) {
+	r.minGasTipCap = tip
+}
+
+// MinGasTipCap returns the floor set by SetMinGasTipCap.
+func (r *RetryClient) MinGasTipCap() *big.Int {
+	return r.minGasTipCap
 }
 
 func (r *RetryClient) newBackoff() *backoff.ExponentialBackOff {
@@ -126,7 +138,19 @@ func (r *RetryClient) SendTransaction(ctx context.Context, tx *types.Transaction
 	_, err := retry(ctx, r, "SendTransaction", slog.LevelWarn, func() (struct{}, error) {
 		return struct{}{}, r.client.SendTransaction(ctx, tx)
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Waiting for the receipt is quiet, so this is what tells a pending
+	// transaction apart from a stuck sweep, and what to look it up by.
+	to := "contract creation"
+	if tx.To() != nil {
+		to = tx.To().Hex()
+	}
+	r.logger.Info("transaction sent, waiting for it to be mined",
+		"tx", tx.Hash().Hex(), "nonce", tx.Nonce(), "to", to,
+		"gasTipCap", tx.GasTipCap().String(), "gasFeeCap", tx.GasFeeCap().String(), "gas", tx.Gas())
+	return nil
 }
 
 func (r *RetryClient) ChainID(ctx context.Context) (*big.Int, error) {
