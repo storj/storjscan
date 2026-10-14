@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -38,6 +39,20 @@ type RetryClient struct {
 	logger         *slog.Logger
 	receiptTimeout time.Duration
 	minGasTipCap   *big.Int
+
+	// A load-balanced endpoint (Infura) can answer from a backend that has not
+	// seen the latest block yet, and report a pending nonce the sender already
+	// used. sent remembers who sent which transaction, so once it is mined
+	// minedNonce can hold the sender's next nonce up against such stale answers.
+	mu         sync.Mutex
+	sent       map[common.Hash]sentTx
+	minedNonce map[common.Address]uint64
+}
+
+// sentTx is the sender and nonce of a transaction sent through RetryClient.
+type sentTx struct {
+	from  common.Address
+	nonce uint64
 }
 
 // NewRetryClient creates a new RetryClient wrapping the given BlockchainClient.
@@ -46,6 +61,8 @@ func NewRetryClient(client BlockchainClient, logger *slog.Logger) *RetryClient {
 		client:         client,
 		logger:         logger,
 		receiptTimeout: 30 * time.Minute,
+		sent:           map[common.Hash]sentTx{},
+		minedNonce:     map[common.Address]uint64{},
 	}
 }
 
@@ -99,10 +116,25 @@ func (r *RetryClient) CodeAt(ctx context.Context, account common.Address, blockN
 	})
 }
 
+// PendingNonceAt returns the account's next nonce, never one below what a
+// transaction mined through this client already used.
 func (r *RetryClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
-	return retry(ctx, r, "PendingNonceAt", slog.LevelWarn, func() (uint64, error) {
+	nonce, err := retry(ctx, r, "PendingNonceAt", slog.LevelWarn, func() (uint64, error) {
 		return r.client.PendingNonceAt(ctx, account)
 	})
+	if err != nil {
+		return 0, err
+	}
+
+	r.mu.Lock()
+	next, ok := r.minedNonce[account]
+	r.mu.Unlock()
+	if ok && nonce < next {
+		r.logger.Warn("node reported a stale nonce, using the next one after the last mined transaction",
+			"address", account.Hex(), "reported", nonce, "using", next)
+		return next, nil
+	}
+	return nonce, nil
 }
 
 func (r *RetryClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
@@ -136,11 +168,29 @@ func (r *RetryClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (ui
 
 func (r *RetryClient) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	_, err := retry(ctx, r, "SendTransaction", slog.LevelWarn, func() (struct{}, error) {
-		return struct{}{}, r.client.SendTransaction(ctx, tx)
+		err := r.client.SendTransaction(ctx, tx)
+		switch {
+		case err == nil:
+			return struct{}{}, nil
+		case isErr(err, "already known"):
+			// An earlier attempt reached the node after all.
+			return struct{}{}, nil
+		case isErr(err, "nonce too low"):
+			// Resending the same signed transaction can never fix its nonce.
+			// The only way it is fine is that it is this very transaction
+			// that used the nonce, on an earlier attempt.
+			if receipt, rerr := r.client.TransactionReceipt(ctx, tx.Hash()); rerr == nil && receipt != nil {
+				return struct{}{}, nil
+			}
+			return struct{}{}, backoff.Permanent(err)
+		default:
+			return struct{}{}, err
+		}
 	})
 	if err != nil {
 		return err
 	}
+	r.trackSent(tx)
 	// Waiting for the receipt is quiet, so this is what tells a pending
 	// transaction apart from a stuck sweep, and what to look it up by.
 	to := "contract creation"
@@ -151,6 +201,40 @@ func (r *RetryClient) SendTransaction(ctx context.Context, tx *types.Transaction
 		"tx", tx.Hash().Hex(), "nonce", tx.Nonce(), "to", to,
 		"gasTipCap", tx.GasTipCap().String(), "gasFeeCap", tx.GasFeeCap().String(), "gas", tx.Gas())
 	return nil
+}
+
+// trackSent remembers the sender and nonce of tx, for TransactionReceipt to
+// record once it is mined.
+func (r *RetryClient) trackSent(tx *types.Transaction) {
+	from, err := types.Sender(types.LatestSignerForChainID(tx.ChainId()), tx)
+	if err != nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent[tx.Hash()] = sentTx{from: from, nonce: tx.Nonce()}
+}
+
+// trackMined records that a transaction sent through this client is mined, so
+// its sender's nonce is used up.
+func (r *RetryClient) trackMined(txHash common.Hash) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.sent[txHash]
+	if !ok {
+		return
+	}
+	delete(r.sent, txHash)
+	if s.nonce+1 > r.minedNonce[s.from] {
+		r.minedNonce[s.from] = s.nonce + 1
+	}
+}
+
+// isErr reports whether an RPC error carries the given node error message.
+// Nodes and providers wrap these messages differently, so only the text is
+// reliable.
+func isErr(err error, msg string) bool {
+	return strings.Contains(strings.ToLower(err.Error()), msg)
 }
 
 func (r *RetryClient) ChainID(ctx context.Context) (*big.Int, error) {
@@ -203,6 +287,9 @@ func (r *RetryClient) TransactionReceipt(ctx context.Context, txHash common.Hash
 		// wait window — it is either still pending or was dropped from the
 		// mempool. Name the transaction so it can be looked up.
 		return nil, fmt.Errorf("transaction %s not mined within %s, still pending or dropped: %w", txHash.Hex(), r.receiptTimeout, err)
+	}
+	if err == nil {
+		r.trackMined(txHash)
 	}
 	return receipt, err
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // mockClient implements BlockchainClient for testing.
@@ -215,7 +216,7 @@ func TestRetryClient_SendTransaction_RetriesThenSucceeds(t *testing.T) {
 	mock := &mockClient{
 		sendTransactionFn: func(ctx context.Context, tx *types.Transaction) error {
 			if calls.Add(1) <= 2 {
-				return errors.New("nonce too low")
+				return errors.New("connection reset by peer")
 			}
 			return nil
 		},
@@ -227,6 +228,125 @@ func TestRetryClient_SendTransaction_RetriesThenSucceeds(t *testing.T) {
 	}
 	if calls.Load() != 3 {
 		t.Fatalf("expected 3 calls, got %d", calls.Load())
+	}
+}
+
+// signedTestTx returns a transaction with the given nonce, signed by a fresh
+// key, and that key's address.
+func signedTestTx(t *testing.T, nonce uint64) (*types.Transaction, common.Address) {
+	t.Helper()
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	chainID := big.NewInt(1)
+	tx, err := types.SignTx(types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &common.Address{},
+		Gas:       21000,
+		GasFeeCap: big.NewInt(2),
+		GasTipCap: big.NewInt(1),
+	}), types.LatestSignerForChainID(chainID), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tx, crypto.PubkeyToAddress(key.PublicKey)
+}
+
+// TestRetryClient_SendTransaction_NonceTooLowIsNotRetried covers a signed
+// transaction whose nonce is already used: resending it can never succeed, so
+// it must fail at once instead of retrying until the backoff gives up.
+func TestRetryClient_SendTransaction_NonceTooLowIsNotRetried(t *testing.T) {
+	var calls atomic.Int32
+	mock := &mockClient{
+		sendTransactionFn: func(ctx context.Context, tx *types.Transaction) error {
+			calls.Add(1)
+			return errors.New("nonce=185826 minNonce=185827: nonce too low")
+		},
+		transactionReceiptFn: func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+			return nil, ethereum.NotFound
+		},
+	}
+	tx, _ := signedTestTx(t, 185826)
+	err := NewRetryClient(mock, testLogger()).SendTransaction(context.Background(), tx)
+	if err == nil || !strings.Contains(err.Error(), "nonce too low") {
+		t.Fatalf("expected nonce too low error, got %v", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("expected 1 call, got %d", calls.Load())
+	}
+}
+
+// TestRetryClient_SendTransaction_OwnNonceTooLow covers an attempt that reached
+// the node although its answer was lost: the retry then finds the nonce used by
+// this very transaction, which is a successful send.
+func TestRetryClient_SendTransaction_OwnNonceTooLow(t *testing.T) {
+	tx, _ := signedTestTx(t, 7)
+	var calls atomic.Int32
+	mock := &mockClient{
+		sendTransactionFn: func(ctx context.Context, sent *types.Transaction) error {
+			if calls.Add(1) == 1 {
+				return errors.New("connection reset by peer")
+			}
+			return errors.New("nonce too low")
+		},
+		transactionReceiptFn: func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+			if txHash != tx.Hash() {
+				return nil, ethereum.NotFound
+			}
+			return &types.Receipt{Status: types.ReceiptStatusSuccessful}, nil
+		},
+	}
+	if err := NewRetryClient(mock, testLogger()).SendTransaction(context.Background(), tx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRetryClient_PendingNonceAt_NeverBelowMined covers a load-balanced
+// endpoint answering from a backend that has not seen the latest block: after a
+// transaction is mined, the next nonce must not reuse its nonce.
+func TestRetryClient_PendingNonceAt_NeverBelowMined(t *testing.T) {
+	tx, from := signedTestTx(t, 185826)
+	reported := uint64(185826) // stale: the transaction below used it
+	mock := &mockClient{
+		sendTransactionFn: func(ctx context.Context, tx *types.Transaction) error {
+			return nil
+		},
+		transactionReceiptFn: func(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+			return &types.Receipt{Status: types.ReceiptStatusSuccessful}, nil
+		},
+		pendingNonceAtFn: func(ctx context.Context, account common.Address) (uint64, error) {
+			return reported, nil
+		},
+	}
+	rc := NewRetryClient(mock, testLogger())
+	ctx := context.Background()
+
+	if err := rc.SendTransaction(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	// Not mined yet: the node's answer is all there is to go by.
+	if nonce, err := rc.PendingNonceAt(ctx, from); err != nil || nonce != 185826 {
+		t.Fatalf("before mining: expected 185826, got %d (err %v)", nonce, err)
+	}
+	if _, err := rc.TransactionReceipt(ctx, tx.Hash()); err != nil {
+		t.Fatal(err)
+	}
+	if nonce, err := rc.PendingNonceAt(ctx, from); err != nil || nonce != 185827 {
+		t.Fatalf("after mining: expected 185827, got %d (err %v)", nonce, err)
+	}
+
+	// A node that is ahead, e.g. with transactions sent elsewhere, still wins.
+	reported = 185830
+	if nonce, err := rc.PendingNonceAt(ctx, from); err != nil || nonce != 185830 {
+		t.Fatalf("node ahead: expected 185830, got %d (err %v)", nonce, err)
+	}
+
+	// Other senders are unaffected.
+	reported = 3
+	if nonce, err := rc.PendingNonceAt(ctx, common.Address{1}); err != nil || nonce != 3 {
+		t.Fatalf("other sender: expected 3, got %d (err %v)", nonce, err)
 	}
 }
 
