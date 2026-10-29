@@ -36,28 +36,11 @@ type Network struct {
 }
 
 func minerTestGenesisBlock(chainID uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
-	// Use AllDevChainProtocolChanges with SimulatedBeacon for automatic block production
-	config := *params.AllDevChainProtocolChanges
-	config.ChainID = big.NewInt(int64(chainID))
-	// Assemble and return the genesis with the precompiles and faucet pre-funded
-	return &core.Genesis{
-		Config:     &config,
-		GasLimit:   gasLimit,
-		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(0),
-		Alloc: map[common.Address]types.Account{
-			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
-			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
-			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
-			common.BytesToAddress([]byte{4}): {Balance: big.NewInt(1)}, // Identity
-			common.BytesToAddress([]byte{5}): {Balance: big.NewInt(1)}, // ModExp
-			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
-			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
-			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
-			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
-			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
-		},
-	}
+	// The developer genesis enables all forks (AllDevChainProtocolChanges) and
+	// pre-deploys the precompiles and system contracts they require.
+	genesis := core.DeveloperGenesisBlock(gasLimit, &faucet)
+	genesis.Config.ChainID = big.NewInt(int64(chainID))
+	return genesis
 }
 
 // NewNetwork creates new test Ethereum network with PoS and inmemory DBs.

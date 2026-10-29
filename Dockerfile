@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # parent image
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Build Delve
 RUN go install github.com/go-delve/delve/cmd/dlv@latest

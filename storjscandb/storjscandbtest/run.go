@@ -86,7 +86,7 @@ func OpenDB(ctx context.Context, log *zap.Logger, connStr, testName, category st
 	schemaSuffix := pgutil.CreateRandomTestingSchemaName(6)
 	schemaName := schemaName(testName, schemaSuffix, category)
 
-	tempDB, err := tempdb.OpenUnique(ctx, log.Named("tempdb"), connStr, schemaName, nil)
+	tempDB, err := tempdb.OpenUnique(ctx, log.Named("tempdb"), connStr, schemaName)
 	if err != nil {
 		return nil, err
 	}
